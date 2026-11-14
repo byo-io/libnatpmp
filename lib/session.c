@@ -163,7 +163,7 @@ static natpmp_request_t *natpmp_session_find_event(natpmp_session_t *session) {
   return nullptr;
 }
 
-// queues the mappings that are due for renewal, and returns when the next one
+// queues all mappings that are due for renewal, and returns when the next one
 // is due
 static natpmp_optional_time_ms_t natpmp_session_renew(natpmp_session_t *session,
                                                       natpmp_time_ms_t now) {
@@ -175,6 +175,11 @@ static natpmp_optional_time_ms_t natpmp_session_renew(natpmp_session_t *session,
   auto const end = begin + session->config.capacity;
   for (auto request = begin; request != end; ++request) {
     if (request->state != NATPMP_REQUEST_ACTIVE) {
+      continue;
+    }
+
+    if (request->map.expires_at <= now) {
+      request->state = NATPMP_REQUEST_FAILED;
       continue;
     }
 
@@ -193,15 +198,15 @@ natpmp_event_t natpmp_session_poll(natpmp_session_t *session,
                                    natpmp_time_ms_t now) {
   assert(session);
 
-  // report what's answered or failed before sending anything
+  // queue any renewals that are due, then report what's answered or failed
+  // before sending anything
+  auto const renewal = natpmp_session_renew(session, now);
   auto const request = natpmp_session_find_event(session);
   if (request) {
     return natpmp_request_take_event(request);
   }
 
-  // queue any renewals that are due, and if nothing is ready to send, return it
-  // as the session's timeout
-  auto const renewal = natpmp_session_renew(session, now);
+  // if nothing is ready to send, the next renewal is the session's timeout
   if (!session->outgoing.head) {
     return (natpmp_event_t){.type = NATPMP_EVENT_TIMEOUT,
                             .timeout = {.deadline = renewal}};
@@ -247,7 +252,11 @@ static void natpmp_session_recover(natpmp_session_t *session,
   for (auto request = begin; request != end; ++request) {
     if (request->state == NATPMP_REQUEST_ANSWERED ||
         request->state == NATPMP_REQUEST_ACTIVE) {
-      request->map.renew_at = renew_at;
+      // a mapping close to its expiry can get a delay that runs past it, so cap
+      // the delay at the expiry, where the mapping fails on time instead
+      request->map.renew_at = renew_at < request->map.expires_at
+                                  ? renew_at
+                                  : request->map.expires_at;
     }
   }
 }

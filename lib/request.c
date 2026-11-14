@@ -99,14 +99,31 @@ void natpmp_request_apply_answer(natpmp_request_t *request,
     // halfway through the lifetime
     request->map.renew_at =
         now + (natpmp_time_ms_t)response->map.lifetime * 500;
+    request->map.expires_at =
+        now + (natpmp_time_ms_t)response->map.lifetime * 1000;
     return;
   }
 }
 
 void natpmp_request_fail(natpmp_request_t *request) {
   assert(request);
-  request->state = natpmp_request_released(request) ? NATPMP_REQUEST_FREE
-                                                    : NATPMP_REQUEST_FAILED;
+
+  if (natpmp_request_released(request)) {
+    request->state = NATPMP_REQUEST_FREE;
+    return;
+  }
+
+  // when a renewal goes unanswered, try again halfway through the remaining
+  // lifetime to avoid a dangling mapping on the gateway that's not tracked
+  if (request->opcode != NATPMP_OPCODE_EXTERNAL_ADDRESS &&
+      request->map.expires_at > 0) {
+    request->map.renew_at +=
+        (request->map.expires_at - request->map.renew_at) / 2;
+    request->state = NATPMP_REQUEST_ACTIVE;
+    return;
+  }
+
+  request->state = NATPMP_REQUEST_FAILED;
 }
 
 bool natpmp_request_release(natpmp_request_t *request) {
