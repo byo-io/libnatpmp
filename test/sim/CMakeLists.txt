@@ -6,6 +6,7 @@ natpmp_add_test_executable(sim_tests
   gateway.c
   main.c
   network.c
+  observer.c
   scenarios.c
   sim.c)
 

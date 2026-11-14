@@ -5,6 +5,7 @@
 #include "client.h"
 #include "gateway.h"
 #include "network.h"
+#include "observer.h"
 
 // A simulated world for testing the client end to end. This is what scenarios
 // use, and it owns virtual time and connects the pieces:
@@ -12,6 +13,7 @@
 // - client.h, a generic application loop around the library's public API
 // - network.h, what carries datagrams between the client and the gateway
 // - gateway.h, a NAT-PMP gateway with real mappings
+// - observer.h, which checks the application only hears what natpmp.h promises
 //
 // A world only lives on the stack of sim_run_scenario, which also reports it
 // and ends its session.
@@ -39,6 +41,7 @@ typedef struct sim {
   sim_time_ms_t now;
 
   sim_client_t client;
+  sim_observer_t observer;
   sim_gateway_t gateway;
   sim_network_t network;
 
@@ -65,6 +68,19 @@ void sim_start(sim_t *sim);
 void sim_run_for(sim_t *sim, sim_duration_ms_t duration);
 
 sim_gateway_stats_t sim_stats(sim_t const *sim);
+
+/**
+ * @brief Check the application knows the gateway's external address
+ */
+void sim_assert_address(sim_t const *sim);
+
+/**
+ * @brief Check the application thinks `handle` is mapped, and that the gateway
+ *        agrees on the external port
+ */
+void sim_assert_mapped(sim_t *sim, natpmp_handle_t handle);
+
+void sim_assert_no_mapping(sim_t *sim, natpmp_handle_t handle);
 
 /**
  * @brief Check nothing is in flight and the client has nothing scheduled

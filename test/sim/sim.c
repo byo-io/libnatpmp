@@ -91,10 +91,14 @@ static void sim_on_client_event(void *ctx, natpmp_event_t const *event) {
   case NATPMP_EVENT_TIMEOUT:
     break;
   }
+
+  sim_observer_on_event(&sim->observer, event);
 }
 
 static void sim_on_client_address_requested(void *ctx) {
-  sim_trace(ctx, "application asked for the external address");
+  sim_t *sim = ctx;
+  sim_trace(sim, "application asked for the external address");
+  sim_observer_on_address_request(&sim->observer);
 }
 
 static void sim_on_client_map_requested(void *ctx,
@@ -106,10 +110,13 @@ static void sim_on_client_map_requested(void *ctx,
   sim_trace(sim, "application asked to map %s port %u, handle %u",
             protocol == NATPMP_PROTOCOL_UDP ? "UDP" : "TCP", port,
             result.value);
+  sim_observer_on_map_request(&sim->observer, result.value, protocol, port);
 }
 
 static void sim_on_client_released(void *ctx, natpmp_handle_t handle) {
-  sim_trace(ctx, "application released handle %u", handle);
+  sim_t *sim = ctx;
+  sim_trace(sim, "application released handle %u", handle);
+  sim_observer_on_release(&sim->observer, handle);
 }
 
 static void sim_deliver_to_gateway(sim_t *sim, sim_datagram_t const *datagram) {
@@ -225,6 +232,37 @@ void sim_run_for(sim_t *sim, sim_duration_ms_t duration) {
 }
 
 sim_gateway_stats_t sim_stats(sim_t const *sim) { return sim->gateway.stats; }
+
+void sim_assert_address(sim_t const *sim) {
+  auto const address = &sim->observer.address;
+  TEST_ASSERT_TRUE_MESSAGE(address->known,
+                           "the application doesn't know the address");
+  TEST_ASSERT_EQUAL_UINT8_ARRAY_MESSAGE(
+      sim->gateway.external_ip.octets, address->external_ip.octets,
+      sizeof(address->external_ip.octets),
+      "the application and gateway disagree on the address");
+}
+
+void sim_assert_mapped(sim_t *sim, natpmp_handle_t handle) {
+  auto const observed = sim_observer_find(&sim->observer, handle);
+  TEST_ASSERT_EQUAL_MESSAGE(SIM_OBSERVED_MAPPED, observed->state,
+                            "the application doesn't think it's mapped");
+
+  auto const mapping = sim_gateway_find_mapping(
+      &sim->gateway, sim->now, observed->protocol, observed->port);
+  TEST_ASSERT_NOT_NULL_MESSAGE(mapping, "the gateway has no mapping for it");
+  TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+      mapping->external_port, observed->external_port,
+      "the application and gateway disagree on the port");
+}
+
+void sim_assert_no_mapping(sim_t *sim, natpmp_handle_t handle) {
+  auto const observed = sim_observer_find(&sim->observer, handle);
+  TEST_ASSERT_NULL_MESSAGE(sim_gateway_find_mapping(&sim->gateway, sim->now,
+                                                    observed->protocol,
+                                                    observed->port),
+                           "the gateway still has a mapping for it");
+}
 
 void sim_assert_idle(sim_t const *sim) {
   TEST_ASSERT_EQUAL_size_t_MESSAGE(0, sim_network_in_flight(&sim->network),
