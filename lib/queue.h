@@ -29,6 +29,14 @@ void natpmp_queue_push(natpmp_queue_t *queue, natpmp_request_t *request);
 void natpmp_queue_release(natpmp_queue_t *queue, natpmp_request_t *request);
 
 /**
+ * @brief Answer a QUEUED or SENT request, wherever it is in the queue
+ */
+void natpmp_queue_answer(natpmp_queue_t *queue,
+                         natpmp_request_t *request,
+                         natpmp_time_ms_t now,
+                         natpmp_response_t const *response);
+
+/**
  * @brief Fail everything waiting, the head included
  *
  * For when the gateway is gone.

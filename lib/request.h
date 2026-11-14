@@ -12,6 +12,8 @@
  *   FREE        -> QUEUED    a request is made in it
  *   QUEUED      -> SENT      it's at the head of the queue and goes out
  *   SENT        -> ANSWERED  the gateway answers it
+ *   QUEUED      -> ANSWERED  the gateway gives its address before the external
+ *                            address request goes out
  *   SENT        -> FAILED    the gateway refuses it, or maps it for no time
  *   QUEUED/SENT -> FAILED    the head is given up on or the gateway can't be
  *                            reached, which fails everything queued

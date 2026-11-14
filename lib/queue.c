@@ -52,6 +52,25 @@ void natpmp_queue_release(natpmp_queue_t *queue, natpmp_request_t *request) {
   }
 }
 
+void natpmp_queue_answer(natpmp_queue_t *queue,
+                         natpmp_request_t *request,
+                         natpmp_time_ms_t now,
+                         natpmp_response_t const *response) {
+  assert(queue);
+  assert(request);
+  assert(response);
+  assert(request->state == NATPMP_REQUEST_QUEUED ||
+         request->state == NATPMP_REQUEST_SENT);
+
+  natpmp_request_t **link = &queue->head;
+  while (*link != request) {
+    assert(*link);
+    link = &(*link)->next;
+  }
+  *link = request->next;
+  natpmp_request_apply_answer(request, response, now);
+}
+
 static void natpmp_queue_pop(natpmp_queue_t *queue) {
   queue->head = queue->head->next;
 }
@@ -103,6 +122,5 @@ void natpmp_queue_on_response(natpmp_queue_t *queue,
     return;
   }
 
-  natpmp_request_apply_answer(queue->head, response, now);
-  natpmp_queue_pop(queue);
+  natpmp_queue_answer(queue, queue->head, now, response);
 }

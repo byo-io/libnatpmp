@@ -293,9 +293,7 @@ static void test_session_refused() {
 static void test_session_ignores_other_responses() {
   begin();
 
-  // nothing sent yet
   request();
-  receive(0, sizeof(address_response), address_response);
   expect_send(0);
 
   // not for the address request
@@ -1038,15 +1036,32 @@ static void test_session_announced_while_queued() {
   request();
   expect_sent(0, sizeof(map_tcp_request), map_tcp_request);
 
-  // not reported until the request's answer reports it
+  // answers the request before it goes out
   receive(10, sizeof(other_address_response), other_address_response);
-  expect_timeout(10, 250);
+  expect_other_address(10);
   receive(20, sizeof(map_response), map_response);
   expect_mapped(20, mapping);
-  expect_send(20);
-  receive(30, sizeof(other_address_response), other_address_response);
-  expect_other_address(30);
-  expect_timeout(30, 20 + renewal);
+  expect_timeout(20, 20 + renewal);
+  natpmp_session_end(session);
+}
+
+static void test_session_repeat_answers_queued() {
+  begin();
+  request();
+  expect_send(0);
+  receive(0, sizeof(address_response), address_response);
+  expect_address(0);
+
+  auto const mapping = map(NATPMP_PROTOCOL_TCP);
+  request();
+  expect_sent(0, sizeof(map_tcp_request), map_tcp_request);
+
+  // the address the session has, which is still an answer
+  receive(10, sizeof(address_response), address_response);
+  expect_address(10);
+  receive(20, sizeof(map_response), map_response);
+  expect_mapped(20, mapping);
+  expect_timeout(20, 20 + renewal);
   natpmp_session_end(session);
 }
 
@@ -1203,6 +1218,7 @@ void session_tests() {
   RUN_TEST(test_session_announced_once);
   RUN_TEST(test_session_announced_after_answer);
   RUN_TEST(test_session_announced_while_queued);
+  RUN_TEST(test_session_repeat_answers_queued);
   RUN_TEST(test_session_answered_late);
   RUN_TEST(test_session_announced_replaces);
   RUN_TEST(test_session_stale_address);

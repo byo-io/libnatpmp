@@ -286,14 +286,15 @@ void natpmp_session_on_datagram(natpmp_session_t *session,
     natpmp_session_recover(session, now);
   }
 
-  if (update.address == NATPMP_GATEWAY_ADDRESS_NEW) {
-    // if the address request is waiting for an answer, let the gateway's
-    // response answer it. Otherwise report the new address to the application.
+  if (response.value.type == NATPMP_RESPONSE_ADDRESS) {
+    // a waiting address request takes the first current address, even one it
+    // isn't the answer to. Otherwise only a new address is reported.
     auto const request = &session->address_request;
-    if (request->state != NATPMP_REQUEST_QUEUED &&
-        request->state != NATPMP_REQUEST_SENT) {
-      request->state = NATPMP_REQUEST_ANSWERED;
-      request->external_ip = response.value.address.external_ip;
+    if (request->state == NATPMP_REQUEST_QUEUED ||
+        request->state == NATPMP_REQUEST_SENT) {
+      natpmp_queue_answer(&session->outgoing, request, now, &response.value);
+    } else if (update.address == NATPMP_GATEWAY_ADDRESS_NEW) {
+      natpmp_request_apply_answer(request, &response.value, now);
     }
   }
 
