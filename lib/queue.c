@@ -17,6 +17,41 @@ void natpmp_queue_push(natpmp_queue_t *queue, natpmp_request_t *request) {
   *last = request;
 }
 
+void natpmp_queue_release(natpmp_queue_t *queue, natpmp_request_t *request) {
+  assert(queue);
+  assert(request);
+  assert(request->opcode != NATPMP_OPCODE_EXTERNAL_ADDRESS);
+
+  if (natpmp_request_released(request)) {
+    return;
+  }
+
+  // what a deletion asks for
+  request->map.external_port = 0;
+  request->map.lifetime = 0;
+
+  switch (request->state) {
+  case NATPMP_REQUEST_FREE:
+    // not in use
+    unreachable();
+  case NATPMP_REQUEST_QUEUED:
+    // goes out as a deletion when its turn comes
+    return;
+  case NATPMP_REQUEST_SENT:
+    // still the head, and goes out again right away as a deletion
+    request->state = NATPMP_REQUEST_QUEUED;
+    return;
+  case NATPMP_REQUEST_ANSWERED:
+  case NATPMP_REQUEST_ACTIVE:
+    natpmp_queue_push(queue, request);
+    return;
+  case NATPMP_REQUEST_FAILED:
+    // there's nothing to delete, and its failure goes unreported
+    request->state = NATPMP_REQUEST_FREE;
+    return;
+  }
+}
+
 static void natpmp_queue_pop(natpmp_queue_t *queue) {
   queue->head = queue->head->next;
 }

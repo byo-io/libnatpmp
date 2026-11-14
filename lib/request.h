@@ -71,20 +71,10 @@ typedef struct natpmp_request {
   };
 } natpmp_request_t;
 
-/**
- * @brief Whether it's a released mapping
- *
- * A mapping asks for its deletion with lifetime 0, which it's never granted.
- */
 bool natpmp_request_released(natpmp_request_t const *request);
 
 bool natpmp_request_has_event(natpmp_request_t const *request);
 
-/**
- * @brief Take its event, which moves it on
- *
- * A mapping that was granted becomes ACTIVE, anything else FREE.
- */
 natpmp_event_t natpmp_request_take_event(natpmp_request_t *request);
 
 bool natpmp_request_matches(natpmp_request_t const *request,
@@ -94,19 +84,4 @@ void natpmp_request_apply_answer(natpmp_request_t *request,
                                  natpmp_response_t const *response,
                                  natpmp_time_ms_t now);
 
-/**
- * @brief Give up on it, the gateway won't answer
- *
- * A released mapping is freed, since it just expires on the gateway. A renewal
- * is tried again later, since the mapping is still there until it expires.
- */
 void natpmp_request_fail(natpmp_request_t *request);
-
-/**
- * @brief Make a mapping in use ask for its deletion
- *
- * Ignored if it was already released.
- *
- * @returns Whether it has to join the queue
- */
-bool natpmp_request_release(natpmp_request_t *request);

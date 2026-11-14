@@ -140,8 +140,8 @@ void natpmp_session_release(natpmp_session_t *session, natpmp_handle_t handle) {
   assert(session);
 
   auto const request = natpmp_session_find(session, handle);
-  if (request && natpmp_request_release(request)) {
-    natpmp_queue_push(&session->outgoing, request);
+  if (request) {
+    natpmp_queue_release(&session->outgoing, request);
   }
 }
 

@@ -175,44 +175,6 @@ static void test_request_fail_renewal() {
   TEST_ASSERT_EQUAL(NATPMP_REQUEST_FREE, request.state);
 }
 
-static void test_request_release_asks_for_deletion() {
-  auto request = mapping(NATPMP_REQUEST_ACTIVE);
-  TEST_ASSERT_TRUE(natpmp_request_release(&request));
-  TEST_ASSERT_TRUE(natpmp_request_released(&request));
-  TEST_ASSERT_EQUAL_UINT16(0, request.map.external_port);
-  TEST_ASSERT_EQUAL_UINT32(0, request.map.lifetime);
-
-  // and an answer not reported yet goes unreported
-  request = mapping(NATPMP_REQUEST_ANSWERED);
-  TEST_ASSERT_TRUE(natpmp_request_release(&request));
-}
-
-static void test_request_release_in_queue() {
-  // keeps its place
-  auto request = mapping(NATPMP_REQUEST_QUEUED);
-  TEST_ASSERT_FALSE(natpmp_request_release(&request));
-  TEST_ASSERT_EQUAL(NATPMP_REQUEST_QUEUED, request.state);
-  TEST_ASSERT_TRUE(natpmp_request_released(&request));
-
-  // still the head, and goes out again as a deletion
-  request = mapping(NATPMP_REQUEST_SENT);
-  TEST_ASSERT_FALSE(natpmp_request_release(&request));
-  TEST_ASSERT_EQUAL(NATPMP_REQUEST_QUEUED, request.state);
-}
-
-static void test_request_release_failed() {
-  // there's nothing to delete
-  auto request = mapping(NATPMP_REQUEST_FAILED);
-  TEST_ASSERT_FALSE(natpmp_request_release(&request));
-  TEST_ASSERT_EQUAL(NATPMP_REQUEST_FREE, request.state);
-}
-
-static void test_request_release_twice() {
-  auto request = released(NATPMP_REQUEST_SENT);
-  TEST_ASSERT_FALSE(natpmp_request_release(&request));
-  TEST_ASSERT_EQUAL(NATPMP_REQUEST_SENT, request.state);
-}
-
 void request_tests() {
   RUN_TEST(test_request_matches);
   RUN_TEST(test_request_released_matches_deletion);
@@ -225,8 +187,4 @@ void request_tests() {
   RUN_TEST(test_request_map_failed_frees);
   RUN_TEST(test_request_fail);
   RUN_TEST(test_request_fail_renewal);
-  RUN_TEST(test_request_release_asks_for_deletion);
-  RUN_TEST(test_request_release_in_queue);
-  RUN_TEST(test_request_release_failed);
-  RUN_TEST(test_request_release_twice);
 }

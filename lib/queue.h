@@ -26,6 +26,8 @@ typedef struct natpmp_queue_status {
 
 void natpmp_queue_push(natpmp_queue_t *queue, natpmp_request_t *request);
 
+void natpmp_queue_release(natpmp_queue_t *queue, natpmp_request_t *request);
+
 /**
  * @brief Fail everything waiting, the head included
  *

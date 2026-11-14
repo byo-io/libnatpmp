@@ -125,37 +125,3 @@ void natpmp_request_fail(natpmp_request_t *request) {
 
   request->state = NATPMP_REQUEST_FAILED;
 }
-
-bool natpmp_request_release(natpmp_request_t *request) {
-  assert(request);
-  assert(request->opcode != NATPMP_OPCODE_EXTERNAL_ADDRESS);
-
-  if (natpmp_request_released(request)) {
-    return false;
-  }
-
-  // what a deletion asks for
-  request->map.external_port = 0;
-  request->map.lifetime = 0;
-
-  switch (request->state) {
-  case NATPMP_REQUEST_FREE:
-    // not in use
-    unreachable();
-  case NATPMP_REQUEST_QUEUED:
-    // goes out as a deletion when its turn comes
-    return false;
-  case NATPMP_REQUEST_SENT:
-    // still the head, and goes out again right away as a deletion
-    request->state = NATPMP_REQUEST_QUEUED;
-    return false;
-  case NATPMP_REQUEST_ANSWERED:
-  case NATPMP_REQUEST_ACTIVE:
-    return true;
-  case NATPMP_REQUEST_FAILED:
-    // there's nothing to delete, and its failure goes unreported
-    request->state = NATPMP_REQUEST_FREE;
-    return false;
-  }
-  unreachable();
-}
