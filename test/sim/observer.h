@@ -21,6 +21,7 @@ typedef struct sim_observed_mapping {
   /// From the last MAPPED
   natpmp_port_t external_port;
   size_t mapped_count;
+  bool failed;
 } sim_observed_mapping_t;
 
 typedef struct sim_observer {

@@ -21,12 +21,15 @@
 // What a scenario has to work with:
 //
 // - The world: sim_start, and sim_run_for to let time pass.
+// - The network: sim_set_network_behavior, with SIM_RANDOM_FAULTS for loss,
+//   duplicates and reordering, or SIM_NETWORK_DOWN and SIM_NETWORK_UP for an
+//   outage.
 // - The application: sim_client_address_request, map, or
 //   sim_client_map_request for the library's whole result, and
 //   sim_client_release.
 // - Checks: sim_assert_address, sim_assert_mapped, sim_assert_no_mapping,
-//   sim_assert_idle, what the application heard through sim_observer_find,
-//   and the counts in sim_stats.
+//   sim_assert_failed, sim_assert_idle, what the application heard through
+//   sim_observer_find, and the counts in sim_stats and sim_network_stats.
 //
 // Use sim->seed for anything random, so that every seed is different.
 
@@ -36,6 +39,14 @@ static constexpr uint64_t SEEDS = 16;
 
 static constexpr natpmp_time_s_t LIFETIME = 3600;
 static constexpr natpmp_port_t PORT = 1234;
+
+// renewing starts halfway through a lifetime (RFC 6886 section 3.3), so this is
+// before the first renewal is due
+static constexpr sim_duration_ms_t BEFORE_RENEWAL = 25 * SIM_MINUTE;
+
+// nine attempts 250 ms apart and doubling, then 64 s more for the last answer
+// (section 3.1), which is when the client gives up
+static constexpr sim_duration_ms_t GIVE_UP = 127'750;
 
 // a scenario that runs once per seed, in a new world each time
 #define SCENARIO(name)                                                         \
@@ -95,4 +106,110 @@ SCENARIO(test_sim_full_lifecycle) {
   TEST_ASSERT_EQUAL_size_t(3 + stats.renewed, stats.requests);
 }
 
-void scenario_tests() { RUN_TEST(test_sim_full_lifecycle); }
+// a mapping the gateway has granted, with some time left until its renewal
+static natpmp_handle_t start_mapped(sim_t *sim) {
+  sim_start(sim);
+  auto const handle = map(sim);
+  sim_run_for(sim, SIM_SECOND);
+  sim_assert_mapped(sim, handle);
+  return handle;
+}
+
+SCENARIO(test_sim_heavy_loss) {
+  sim_start(sim);
+  sim_set_network_behavior(sim,
+                           SIM_RANDOM_FAULTS(sim->seed, .loss_percent = 30));
+  sim_client_address_request(&sim->client);
+  auto const handle = map(sim);
+
+  sim_run_for(sim, 24 * SIM_HOUR);
+  TEST_ASSERT_GREATER_THAN_size_t(0, sim_network_stats(sim).lost);
+  sim_assert_address(sim);
+  sim_assert_mapped(sim, handle);
+}
+
+SCENARIO(test_sim_duplicates_and_reordering) {
+  sim_start(sim);
+  sim_set_network_behavior(
+      sim,
+      SIM_RANDOM_FAULTS(sim->seed, .duplicate_percent = 20, .jitter = 500));
+  sim_client_address_request(&sim->client);
+  auto const handle = map(sim);
+
+  sim_run_for(sim, 24 * SIM_HOUR);
+  TEST_ASSERT_GREATER_THAN_size_t(0, sim_network_stats(sim).duplicated);
+  sim_assert_address(sim);
+  sim_assert_mapped(sim, handle);
+  TEST_ASSERT_EQUAL_UINT16(PORT, observed(sim, handle)->external_port);
+  TEST_ASSERT_EQUAL_size_t(1, sim_stats(sim).created);
+  TEST_ASSERT_EQUAL_size_t(0, sim_stats(sim).expired);
+}
+
+SCENARIO(test_sim_outage_before_mapping) {
+  sim_start(sim);
+  sim_set_network_behavior(sim, SIM_NETWORK_DOWN);
+  auto const handle = map(sim);
+
+  sim_run_for(sim, GIVE_UP + SIM_SECOND);
+  sim_assert_failed(sim, handle);
+  TEST_ASSERT_EQUAL_size_t(9, sim_network_stats(sim).lost);
+
+  sim_set_network_behavior(sim, SIM_NETWORK_UP);
+  auto const again = map(sim);
+  sim_run_for(sim, SIM_SECOND);
+  sim_assert_mapped(sim, again);
+}
+
+SCENARIO(test_sim_outage_shorter_than_retransmissions) {
+  auto const handle = start_mapped(sim);
+
+  sim_run_for(sim, BEFORE_RENEWAL + 4 * SIM_MINUTE);
+  sim_set_network_behavior(sim, SIM_NETWORK_DOWN);
+  sim_run_for(sim, SIM_MINUTE);
+  sim_set_network_behavior(sim, SIM_NETWORK_UP);
+  TEST_ASSERT_GREATER_THAN_size_t(0, sim_network_stats(sim).lost);
+
+  sim_run_for(sim, SIM_HOUR);
+  sim_assert_mapped(sim, handle);
+  TEST_ASSERT_EQUAL_size_t(0, sim_stats(sim).expired);
+}
+
+SCENARIO(test_sim_outage_longer_than_retransmissions) {
+  auto const handle = start_mapped(sim);
+
+  // the renewal goes unanswered, but the mapping is still there, so the client
+  // tries again later
+  sim_run_for(sim, BEFORE_RENEWAL);
+  sim_set_network_behavior(sim, SIM_NETWORK_DOWN);
+  sim_run_for(sim, 10 * SIM_MINUTE);
+  sim_set_network_behavior(sim, SIM_NETWORK_UP);
+  TEST_ASSERT_EQUAL_size_t(9, sim_network_stats(sim).lost);
+
+  sim_run_for(sim, SIM_HOUR);
+  sim_assert_mapped(sim, handle);
+  TEST_ASSERT_EQUAL_size_t(1, sim_stats(sim).created);
+  TEST_ASSERT_EQUAL_size_t(0, sim_stats(sim).expired);
+}
+
+SCENARIO(test_sim_outage_longer_than_lifetime) {
+  auto const handle = start_mapped(sim);
+
+  sim_run_for(sim, BEFORE_RENEWAL);
+  sim_set_network_behavior(sim, SIM_NETWORK_DOWN);
+  sim_run_for(sim, SIM_HOUR);
+  sim_set_network_behavior(sim, SIM_NETWORK_UP);
+
+  sim_assert_failed(sim, handle);
+  sim_assert_no_mapping(sim, handle);
+  TEST_ASSERT_EQUAL_size_t(1, sim_stats(sim).expired);
+}
+
+void scenario_tests() {
+  RUN_TEST(test_sim_full_lifecycle);
+  RUN_TEST(test_sim_heavy_loss);
+  RUN_TEST(test_sim_duplicates_and_reordering);
+  RUN_TEST(test_sim_outage_before_mapping);
+  RUN_TEST(test_sim_outage_shorter_than_retransmissions);
+  RUN_TEST(test_sim_outage_longer_than_retransmissions);
+  RUN_TEST(test_sim_outage_longer_than_lifetime);
+}

@@ -67,7 +67,15 @@ void sim_start(sim_t *sim);
 
 void sim_run_for(sim_t *sim, sim_duration_ms_t duration);
 
+/**
+ * @brief Change what happens to datagrams from now on, all of them arrive
+ *        normally by default
+ */
+void sim_set_network_behavior(sim_t *sim, sim_network_behavior_t behavior);
+
 sim_gateway_stats_t sim_stats(sim_t const *sim);
+
+sim_network_stats_t sim_network_stats(sim_t const *sim);
 
 /**
  * @brief Check the application knows the gateway's external address
@@ -81,6 +89,8 @@ void sim_assert_address(sim_t const *sim);
 void sim_assert_mapped(sim_t *sim, natpmp_handle_t handle);
 
 void sim_assert_no_mapping(sim_t *sim, natpmp_handle_t handle);
+
+void sim_assert_failed(sim_t const *sim, natpmp_handle_t handle);
 
 /**
  * @brief Check nothing is in flight and the client has nothing scheduled

@@ -60,7 +60,10 @@ sim_on_client_send(void *ctx, size_t size, uint8_t const data[size]) {
   sim_t *sim = ctx;
   sim_count_event(sim);
   sim_trace(sim, "client sent %zu bytes", size);
-  sim_network_send(&sim->network, sim->now, SIM_ENDPOINT_SERVER, size, data);
+  if (!sim_network_send(&sim->network, sim->now, SIM_ENDPOINT_SERVER, size,
+                        data)) {
+    sim_trace(sim, "network lost the client's datagram");
+  }
 }
 
 static void sim_on_client_event(void *ctx, natpmp_event_t const *event) {
@@ -124,8 +127,10 @@ static void sim_deliver_to_gateway(sim_t *sim, sim_datagram_t const *datagram) {
                                              datagram->size, datagram->data);
   sim_trace(sim, "gateway got %zu bytes, answered with result %u",
             datagram->size, reply.result);
-  sim_network_send(&sim->network, sim->now, SIM_ENDPOINT_CLIENT, reply.size,
-                   reply.data);
+  if (!sim_network_send(&sim->network, sim->now, SIM_ENDPOINT_CLIENT,
+                        reply.size, reply.data)) {
+    sim_trace(sim, "network lost the gateway's datagram");
+  }
 }
 
 static void sim_deliver_due(sim_t *sim) {
@@ -231,7 +236,15 @@ void sim_run_for(sim_t *sim, sim_duration_ms_t duration) {
   }
 }
 
+void sim_set_network_behavior(sim_t *sim, sim_network_behavior_t behavior) {
+  sim_network_set_behavior(&sim->network, behavior);
+}
+
 sim_gateway_stats_t sim_stats(sim_t const *sim) { return sim->gateway.stats; }
+
+sim_network_stats_t sim_network_stats(sim_t const *sim) {
+  return sim->network.stats;
+}
 
 void sim_assert_address(sim_t const *sim) {
   auto const address = &sim->observer.address;
@@ -262,6 +275,11 @@ void sim_assert_no_mapping(sim_t *sim, natpmp_handle_t handle) {
                                                     observed->protocol,
                                                     observed->port),
                            "the gateway still has a mapping for it");
+}
+
+void sim_assert_failed(sim_t const *sim, natpmp_handle_t handle) {
+  TEST_ASSERT_TRUE_MESSAGE(sim_observer_find(&sim->observer, handle)->failed,
+                           "the application didn't hear it failed");
 }
 
 void sim_assert_idle(sim_t const *sim) {

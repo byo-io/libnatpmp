@@ -85,6 +85,7 @@ void sim_observer_on_event(sim_observer_t *observer,
   case NATPMP_EVENT_MAP_FAILED: {
     auto const mapping = find_open_mapping(observer, event->map_failed.handle);
     mapping->state = SIM_OBSERVED_FINISHED;
+    mapping->failed = true;
     break;
   }
   case NATPMP_EVENT_SEND:
