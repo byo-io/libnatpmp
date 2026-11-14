@@ -155,15 +155,9 @@ static size_t write_response(sim_gateway_t const *gateway,
   return size;
 }
 
-static sim_gateway_reply_t on_address_request(sim_gateway_t *gateway,
-                                              sim_time_ms_t now,
-                                              size_t size,
-                                              uint8_t const data[size]) {
-  struct natpmp_address_request request;
-  TEST_ASSERT_EQUAL_MESSAGE(NATPMP_OK,
-                            natpmp_address_request_decode(&request, data, size),
-                            "malformed external address request");
-
+// an answer to an address request and an announcement are the same
+static sim_gateway_reply_t address_reply(sim_gateway_t const *gateway,
+                                         sim_time_ms_t now) {
   struct natpmp_address_response response = {};
   memcpy(response.external_ip, gateway->external_ip.octets,
          sizeof(response.external_ip));
@@ -173,9 +167,20 @@ static sim_gateway_reply_t on_address_request(sim_gateway_t *gateway,
                                    &response, body, sizeof(body), &body_size));
 
   sim_gateway_reply_t reply = {.result = NATPMP_RESULT_SUCCESS};
-  reply.size =
-      write_response(gateway, now, request.opcode, body_size, body, reply.data);
+  reply.size = write_response(gateway, now, NATPMP_OPCODE_EXTERNAL_ADDRESS,
+                              body_size, body, reply.data);
   return reply;
+}
+
+static sim_gateway_reply_t on_address_request(sim_gateway_t *gateway,
+                                              sim_time_ms_t now,
+                                              size_t size,
+                                              uint8_t const data[size]) {
+  struct natpmp_address_request request;
+  TEST_ASSERT_EQUAL_MESSAGE(NATPMP_OK,
+                            natpmp_address_request_decode(&request, data, size),
+                            "malformed external address request");
+  return address_reply(gateway, now);
 }
 
 static sim_gateway_reply_t on_map_request(sim_gateway_t *gateway,
@@ -217,6 +222,24 @@ void sim_gateway_start(sim_gateway_t *gateway,
   gateway->started = now;
 }
 
+// 250 ms after the first, doubling after every one (section 3.2.1)
+static void start_announcing(sim_gateway_t *gateway, sim_time_ms_t now) {
+  gateway->announcements.left = SIM_GATEWAY_ANNOUNCEMENTS;
+  gateway->announcements.next = now;
+}
+
+void sim_gateway_restart(sim_gateway_t *gateway, sim_time_ms_t now) {
+  sim_gateway_start(gateway, gateway->external_ip, now);
+  start_announcing(gateway, now);
+}
+
+void sim_gateway_change_address(sim_gateway_t *gateway,
+                                natpmp_ipv4_address_t external_ip,
+                                sim_time_ms_t now) {
+  gateway->external_ip = external_ip;
+  start_announcing(gateway, now);
+}
+
 sim_gateway_reply_t sim_gateway_on_datagram(sim_gateway_t *gateway,
                                             sim_time_ms_t now,
                                             size_t size,
@@ -241,4 +264,25 @@ sim_gateway_find_mapping(sim_gateway_t *gateway,
                          natpmp_port_t internal_port) {
   expire_mappings(gateway, now);
   return find_mapping(gateway, protocol, internal_port);
+}
+
+bool sim_gateway_next_announcement(sim_gateway_t const *gateway,
+                                   sim_time_ms_t *out) {
+  if (gateway->announcements.left == 0) {
+    return false;
+  }
+  *out = gateway->announcements.next;
+  return true;
+}
+
+sim_gateway_reply_t sim_gateway_announce(sim_gateway_t *gateway,
+                                         sim_time_ms_t now) {
+  sim_time_ms_t due = 0;
+  TEST_ASSERT_TRUE(sim_gateway_next_announcement(gateway, &due));
+  TEST_ASSERT_LESS_OR_EQUAL_UINT64(now, due);
+
+  auto const sent = SIM_GATEWAY_ANNOUNCEMENTS - gateway->announcements.left;
+  gateway->announcements.next = now + ((sim_duration_ms_t)250 << sent);
+  --gateway->announcements.left;
+  return address_reply(gateway, now);
 }

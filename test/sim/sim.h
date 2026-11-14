@@ -67,6 +67,10 @@ void sim_start(sim_t *sim);
 
 void sim_run_for(sim_t *sim, sim_duration_ms_t duration);
 
+void sim_restart_gateway(sim_t *sim);
+
+void sim_change_address(sim_t *sim, natpmp_ipv4_address_t external_ip);
+
 /**
  * @brief Change what happens to datagrams from now on, all of them arrive
  *        normally by default

@@ -133,6 +133,20 @@ static void sim_deliver_to_gateway(sim_t *sim, sim_datagram_t const *datagram) {
   }
 }
 
+static void sim_announce_due(sim_t *sim) {
+  sim_time_ms_t due = 0;
+  if (!sim_gateway_next_announcement(&sim->gateway, &due) || due > sim->now) {
+    return;
+  }
+
+  auto const announcement = sim_gateway_announce(&sim->gateway, sim->now);
+  sim_trace(sim, "gateway announced its address");
+  if (!sim_network_send(&sim->network, sim->now, SIM_ENDPOINT_CLIENT,
+                        announcement.size, announcement.data)) {
+    sim_trace(sim, "network lost the gateway's datagram");
+  }
+}
+
 static void sim_deliver_due(sim_t *sim) {
   sim_datagram_t datagram;
   while (sim_network_receive(&sim->network, sim->now, &datagram)) {
@@ -167,6 +181,12 @@ static sim_time_ms_t sim_next_time(sim_t const *sim, sim_time_ms_t until) {
   sim_time_ms_t arrival = 0;
   if (sim_network_next_arrival(&sim->network, &arrival) && arrival < next) {
     next = arrival;
+  }
+
+  sim_time_ms_t announcement = 0;
+  if (sim_gateway_next_announcement(&sim->gateway, &announcement) &&
+      announcement < next) {
+    next = announcement;
   }
   return next;
 }
@@ -227,6 +247,7 @@ void sim_start(sim_t *sim) {
 void sim_run_for(sim_t *sim, sim_duration_ms_t duration) {
   auto const until = sim->now + duration;
   while (true) {
+    sim_announce_due(sim);
     sim_deliver_due(sim);
     sim_run_client(sim);
     if (sim->now == until) {
@@ -234,6 +255,18 @@ void sim_run_for(sim_t *sim, sim_duration_ms_t duration) {
     }
     sim->now = sim_next_time(sim, until);
   }
+}
+
+void sim_restart_gateway(sim_t *sim) {
+  sim_trace(sim, "gateway restarted and lost its mappings");
+  sim_gateway_restart(&sim->gateway, sim->now);
+}
+
+void sim_change_address(sim_t *sim, natpmp_ipv4_address_t external_ip) {
+  auto const octets = external_ip.octets;
+  sim_trace(sim, "gateway's address changed to %u.%u.%u.%u", octets[0],
+            octets[1], octets[2], octets[3]);
+  sim_gateway_change_address(&sim->gateway, external_ip, sim->now);
 }
 
 void sim_set_network_behavior(sim_t *sim, sim_network_behavior_t behavior) {

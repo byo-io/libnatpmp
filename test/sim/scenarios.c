@@ -24,6 +24,8 @@
 // - The network: sim_set_network_behavior, with SIM_RANDOM_FAULTS for loss,
 //   duplicates and reordering, or SIM_NETWORK_DOWN and SIM_NETWORK_UP for an
 //   outage.
+// - The gateway: sim_restart_gateway and sim_change_address, which it
+//   announces.
 // - The application: sim_client_address_request, map, or
 //   sim_client_map_request for the library's whole result, and
 //   sim_client_release.
@@ -47,6 +49,12 @@ static constexpr sim_duration_ms_t BEFORE_RENEWAL = 25 * SIM_MINUTE;
 // nine attempts 250 ms apart and doubling, then 64 s more for the last answer
 // (section 3.1), which is when the client gives up
 static constexpr sim_duration_ms_t GIVE_UP = 127'750;
+
+// the client renews within 5 s of seeing the gateway restart (section 3.7),
+// plus a round trip
+static constexpr sim_duration_ms_t RECOVERY = 6 * SIM_SECOND;
+
+static constexpr natpmp_ipv4_address_t NEW_ADDRESS = {{198, 51, 100, 1}};
 
 // a scenario that runs once per seed, in a new world each time
 #define SCENARIO(name)                                                         \
@@ -204,6 +212,100 @@ SCENARIO(test_sim_outage_longer_than_lifetime) {
   TEST_ASSERT_EQUAL_size_t(1, sim_stats(sim).expired);
 }
 
+SCENARIO(test_sim_gateway_restart) {
+  auto const handle = start_mapped(sim);
+  sim_run_for(sim, 10 * SIM_MINUTE);
+  sim_restart_gateway(sim);
+  sim_assert_no_mapping(sim, handle);
+
+  // the first announcement shows the new epoch, and the client maps it again
+  sim_run_for(sim, RECOVERY);
+  sim_assert_mapped(sim, handle);
+  TEST_ASSERT_EQUAL_UINT16(PORT, observed(sim, handle)->external_port);
+  TEST_ASSERT_EQUAL_size_t(2, sim_stats(sim).created);
+  TEST_ASSERT_EQUAL_size_t(2, observed(sim, handle)->mapped_count);
+
+  // and only once, the other announcements are from the same epoch
+  sim_run_for(sim, 5 * SIM_MINUTE);
+  TEST_ASSERT_EQUAL_size_t(2, sim_stats(sim).created);
+  TEST_ASSERT_EQUAL_size_t(0, sim_stats(sim).renewed);
+}
+
+// everything the gateway sends to the client unasked, as long as the client
+// doesn't ask for the address either
+static sim_fate_t lose_address_responses(void * /*ctx*/,
+                                         sim_endpoint_t to,
+                                         size_t size,
+                                         uint8_t const data[]) {
+  return (sim_fate_t){
+      .lost = to == SIM_ENDPOINT_CLIENT && size >= 2 && data[1] == 128,
+  };
+}
+
+SCENARIO(test_sim_gateway_restart_unannounced) {
+  auto const handle = start_mapped(sim);
+  sim_set_network_behavior(
+      sim, (sim_network_behavior_t){.on_send = lose_address_responses});
+  sim_run_for(sim, 10 * SIM_MINUTE);
+  sim_restart_gateway(sim);
+
+  // the client can't know
+  sim_run_for(sim, 10 * SIM_MINUTE);
+  TEST_ASSERT_EQUAL_size_t(SIM_GATEWAY_ANNOUNCEMENTS,
+                           sim_network_stats(sim).lost);
+  sim_assert_no_mapping(sim, handle);
+
+  // until it renews, which maps it again
+  sim_run_for(sim, 15 * SIM_MINUTE);
+  sim_assert_mapped(sim, handle);
+  TEST_ASSERT_EQUAL_size_t(2, sim_stats(sim).created);
+}
+
+SCENARIO(test_sim_gateway_restart_during_outage) {
+  auto const handle = start_mapped(sim);
+  sim_run_for(sim, 10 * SIM_MINUTE);
+  sim_set_network_behavior(sim, SIM_NETWORK_DOWN);
+  sim_restart_gateway(sim);
+  sim_run_for(sim, 10 * SIM_SECOND);
+  sim_set_network_behavior(sim, SIM_NETWORK_UP);
+
+  // the announcements keep coming after the first few are lost
+  sim_run_for(sim, 10 * SIM_SECOND + RECOVERY);
+  TEST_ASSERT_EQUAL_size_t(6, sim_network_stats(sim).lost);
+  sim_assert_mapped(sim, handle);
+  TEST_ASSERT_EQUAL_size_t(2, sim_stats(sim).created);
+}
+
+SCENARIO(test_sim_address_change) {
+  sim_start(sim);
+  sim_client_address_request(&sim->client);
+  auto const handle = map(sim);
+  sim_run_for(sim, 10 * SIM_MINUTE);
+
+  // heard once, the observer fails a repeat of any of the announcements
+  sim_change_address(sim, NEW_ADDRESS);
+  sim_run_for(sim, 5 * SIM_MINUTE);
+  sim_assert_address(sim);
+  sim_assert_mapped(sim, handle);
+  TEST_ASSERT_EQUAL_size_t(1, sim_stats(sim).created);
+}
+
+SCENARIO(test_sim_address_change_while_asking) {
+  sim_start(sim);
+  sim_set_network_behavior(
+      sim,
+      SIM_RANDOM_FAULTS(sim->seed, .duplicate_percent = 20, .jitter = 500));
+  sim_client_address_request(&sim->client);
+  sim_run_for(sim, SIM_SECOND);
+
+  // asking as the address changes, with duplicates of the answers and
+  // announcements
+  sim_client_address_request(&sim->client);
+  sim_change_address(sim, NEW_ADDRESS);
+  sim_run_for(sim, 5 * SIM_MINUTE);
+  sim_assert_address(sim);
+}
+
 void scenario_tests() {
   RUN_TEST(test_sim_full_lifecycle);
   RUN_TEST(test_sim_heavy_loss);
@@ -212,4 +314,9 @@ void scenario_tests() {
   RUN_TEST(test_sim_outage_shorter_than_retransmissions);
   RUN_TEST(test_sim_outage_longer_than_retransmissions);
   RUN_TEST(test_sim_outage_longer_than_lifetime);
+  RUN_TEST(test_sim_gateway_restart);
+  RUN_TEST(test_sim_gateway_restart_unannounced);
+  RUN_TEST(test_sim_gateway_restart_during_outage);
+  RUN_TEST(test_sim_address_change);
+  RUN_TEST(test_sim_address_change_while_asking);
 }
