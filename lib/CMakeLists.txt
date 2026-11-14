@@ -8,6 +8,7 @@ function(natpmp_add_library target)
   target_sources(${target}
     PRIVATE
       gateway.c
+      mapping.c
       packet.c
       queue.c
       request.c

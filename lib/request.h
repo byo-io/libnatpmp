@@ -4,39 +4,21 @@
 #include <byo/natpmp/natpmp.h>
 
 /**
- * @brief A request, from when it's made until its last event
+ * @brief A request to the gateway, from when it's queued until its owner takes
+ *        what came of it
  *
- * Mappings live in the session's slots, and the external address request in
- * the session itself. Each moves through these states:
+ * Each mapping owns one, and the session owns the external address request.
+ * They move through these states:
  *
- *   FREE        -> QUEUED    a request is made in it
- *   QUEUED      -> SENT      it's at the head of the queue and goes out
- *   SENT        -> ANSWERED  the gateway answers it
- *   QUEUED      -> ANSWERED  the gateway gives its address before the external
- *                            address request goes out
- *   SENT        -> FAILED    the gateway refuses it, or maps it for no time
- *   QUEUED/SENT -> FAILED    the head is given up on or the gateway can't be
- *                            reached, which fails everything queued
- *   QUEUED/SENT -> ACTIVE    the same, for a renewal, which tries again
- *                            halfway to `map.expires_at`
- *   FREE/FAILED -> ANSWERED  the gateway announces a new external address, or
- *                            answers with one too late, for the external
- *                            address request
- *   ANSWERED    -> FREE      an external address request's answer is polled
- *   ANSWERED    -> ACTIVE    a mapping's answer is polled
- *   FAILED      -> FREE      its failure is polled
- *   ACTIVE      -> QUEUED    `map.renew_at` passes, and it joins the back of
- *                            the queue
- *   ACTIVE      -> FAILED    `map.expires_at` passes first
- *
- * Releasing a mapping makes it ask for its deletion, and frees it without an
- * event once that's answered, refused or given up on. A QUEUED one keeps its
- * place in the queue:
- *
- *   ANSWERED/ACTIVE -> QUEUED  it joins the back of the queue
- *   SENT            -> QUEUED  it goes out again right away
- *   QUEUED/SENT     -> FREE    its deletion is done
- *   FAILED          -> FREE    right away, there's nothing to delete
+ *   IDLE            -> QUEUED    it's pushed
+ *   QUEUED          -> SENT      it's at the head of the queue and goes out
+ *   QUEUED/SENT     -> ANSWERED  a response for it arrives
+ *   QUEUED/SENT     -> FAILED    the head is given up on or the gateway can't
+ *                                be reached, which fails everything queued
+ *   SENT            -> QUEUED    it changed, and goes out again right away
+ *   IDLE/ANSWERED/  -> ANSWERED  the gateway gives a new external address, for
+ *   FAILED                       the external address request
+ *   ANSWERED/FAILED -> IDLE      its owner takes what came of it
  *
  * A request is in the queue exactly while it's QUEUED or SENT, and only the
  * head is ever SENT. It stays SENT while it's retransmitted.
@@ -44,46 +26,30 @@
 typedef struct natpmp_request {
   /// The request behind this one in the queue
   struct natpmp_request *next;
-  natpmp_handle_t handle;
-  /// Which request this is, and so which member of the union is in use
-  enum natpmp_opcode opcode;
   enum {
-    NATPMP_REQUEST_FREE,
+    NATPMP_REQUEST_IDLE,
     /// Waiting to go out
     NATPMP_REQUEST_QUEUED,
     /// On the wire, waiting for the gateway's answer
     NATPMP_REQUEST_SENT,
+    /// `response` came, an error included
     NATPMP_REQUEST_ANSWERED,
+    /// No response came
     NATPMP_REQUEST_FAILED,
-    /// A mapping that was reported, until `map.renew_at`
-    NATPMP_REQUEST_ACTIVE,
   } state;
-  union {
-    /// Once ANSWERED
-    natpmp_ipv4_address_t external_ip;
-    /// `external_port` and `lifetime` are asked for, then granted once
-    /// ANSWERED, and renewals ask for them again. Both are 0 once released.
-    struct {
-      natpmp_port_t internal_port;
-      natpmp_port_t external_port;
-      natpmp_time_s_t lifetime;
-      natpmp_time_ms_t renew_at;
-      natpmp_time_ms_t expires_at;
-    } map;
-  };
+  enum natpmp_opcode opcode;
+  natpmp_port_t internal_port;
+  natpmp_port_t external_port;
+  /// 0 asks for a deletion
+  natpmp_time_s_t lifetime;
+  /// Once ANSWERED, with `answered_at`
+  natpmp_response_t response;
+  natpmp_time_ms_t answered_at;
 } natpmp_request_t;
-
-bool natpmp_request_released(natpmp_request_t const *request);
-
-bool natpmp_request_has_event(natpmp_request_t const *request);
-
-natpmp_event_t natpmp_request_take_event(natpmp_request_t *request);
 
 bool natpmp_request_matches(natpmp_request_t const *request,
                             natpmp_response_t const *response);
 
-void natpmp_request_apply_answer(natpmp_request_t *request,
-                                 natpmp_response_t const *response,
-                                 natpmp_time_ms_t now);
-
-void natpmp_request_fail(natpmp_request_t *request);
+void natpmp_request_answer(natpmp_request_t *request,
+                           natpmp_time_ms_t now,
+                           natpmp_response_t const *response);

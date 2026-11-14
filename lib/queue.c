@@ -17,41 +17,6 @@ void natpmp_queue_push(natpmp_queue_t *queue, natpmp_request_t *request) {
   *last = request;
 }
 
-void natpmp_queue_release(natpmp_queue_t *queue, natpmp_request_t *request) {
-  assert(queue);
-  assert(request);
-  assert(request->opcode != NATPMP_OPCODE_EXTERNAL_ADDRESS);
-
-  if (natpmp_request_released(request)) {
-    return;
-  }
-
-  // what a deletion asks for
-  request->map.external_port = 0;
-  request->map.lifetime = 0;
-
-  switch (request->state) {
-  case NATPMP_REQUEST_FREE:
-    // not in use
-    unreachable();
-  case NATPMP_REQUEST_QUEUED:
-    // goes out as a deletion when its turn comes
-    return;
-  case NATPMP_REQUEST_SENT:
-    // still the head, and goes out again right away as a deletion
-    request->state = NATPMP_REQUEST_QUEUED;
-    return;
-  case NATPMP_REQUEST_ANSWERED:
-  case NATPMP_REQUEST_ACTIVE:
-    natpmp_queue_push(queue, request);
-    return;
-  case NATPMP_REQUEST_FAILED:
-    // there's nothing to delete, and its failure goes unreported
-    request->state = NATPMP_REQUEST_FREE;
-    return;
-  }
-}
-
 void natpmp_queue_answer(natpmp_queue_t *queue,
                          natpmp_request_t *request,
                          natpmp_time_ms_t now,
@@ -68,7 +33,7 @@ void natpmp_queue_answer(natpmp_queue_t *queue,
     link = &(*link)->next;
   }
   *link = request->next;
-  natpmp_request_apply_answer(request, response, now);
+  natpmp_request_answer(request, now, response);
 }
 
 static void natpmp_queue_pop(natpmp_queue_t *queue) {
@@ -77,7 +42,7 @@ static void natpmp_queue_pop(natpmp_queue_t *queue) {
 
 void natpmp_queue_fail_all(natpmp_queue_t *queue) {
   while (queue->head) {
-    natpmp_request_fail(queue->head);
+    queue->head->state = NATPMP_REQUEST_FAILED;
     natpmp_queue_pop(queue);
   }
 }
@@ -100,12 +65,11 @@ natpmp_queue_status_t natpmp_queue_poll(natpmp_queue_t *queue,
   }
 
   view_t const dst = {.size = sizeof(queue->data), .data = queue->data};
-  auto const size =
-      request->opcode == NATPMP_OPCODE_EXTERNAL_ADDRESS
-          ? natpmp_packet_write_address_request(dst)
-          : natpmp_packet_write_map_request(
-                dst, request->opcode, request->map.internal_port,
-                request->map.external_port, request->map.lifetime);
+  auto const size = request->opcode == NATPMP_OPCODE_EXTERNAL_ADDRESS
+                        ? natpmp_packet_write_address_request(dst)
+                        : natpmp_packet_write_map_request(
+                              dst, request->opcode, request->internal_port,
+                              request->external_port, request->lifetime);
   request->state = NATPMP_REQUEST_SENT;
   natpmp_retransmit_advance(&queue->retransmit, now);
   return (natpmp_queue_status_t){.status = NATPMP_RETRANSMIT_DUE, .size = size};

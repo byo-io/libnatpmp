@@ -26,8 +26,6 @@ typedef struct natpmp_queue_status {
 
 void natpmp_queue_push(natpmp_queue_t *queue, natpmp_request_t *request);
 
-void natpmp_queue_release(natpmp_queue_t *queue, natpmp_request_t *request);
-
 /**
  * @brief Answer a QUEUED or SENT request, wherever it is in the queue
  */

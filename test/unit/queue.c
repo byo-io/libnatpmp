@@ -6,7 +6,8 @@
 static natpmp_request_t mapping(natpmp_port_t port) {
   return (natpmp_request_t){
       .opcode = NATPMP_OPCODE_MAP_TCP,
-      .map = {.internal_port = port, .lifetime = 3600},
+      .internal_port = port,
+      .lifetime = 3600,
   };
 }
 
@@ -35,7 +36,7 @@ static void test_queue_in_order() {
   TEST_ASSERT_EQUAL(NATPMP_REQUEST_QUEUED, second.state);
 
   auto const response = grant(1);
-  natpmp_queue_on_response(&queue, 10, &response);
+  natpmp_queue_on_response(&queue, 0, &response);
   TEST_ASSERT_EQUAL(NATPMP_REQUEST_ANSWERED, first.state);
   TEST_ASSERT_EQUAL_PTR(&second, queue.head);
 }
@@ -73,7 +74,7 @@ static void test_queue_new_head_starts_over() {
 
   // goes out right away, then waits 250 ms like the first did
   auto const response = grant(1);
-  natpmp_queue_on_response(&queue, 300, &response);
+  natpmp_queue_on_response(&queue, 0, &response);
   TEST_ASSERT_EQUAL(NATPMP_RETRANSMIT_DUE,
                     natpmp_queue_poll(&queue, 300).status);
   TEST_ASSERT_EQUAL_UINT64(550, queue.retransmit.next);
@@ -121,87 +122,32 @@ static void test_queue_fail_all() {
   natpmp_queue_t queue = {};
   auto first = mapping(1);
   auto second = mapping(2);
-  auto released = mapping(3);
-  released.map.lifetime = 0;
   natpmp_queue_push(&queue, &first);
   natpmp_queue_push(&queue, &second);
-  natpmp_queue_push(&queue, &released);
   natpmp_queue_poll(&queue, 0);
 
   natpmp_queue_fail_all(&queue);
   TEST_ASSERT_NULL(queue.head);
   TEST_ASSERT_EQUAL(NATPMP_REQUEST_FAILED, first.state);
   TEST_ASSERT_EQUAL(NATPMP_REQUEST_FAILED, second.state);
-  TEST_ASSERT_EQUAL(NATPMP_REQUEST_FREE, released.state);
 }
 
-static void test_queue_release_asks_for_deletion() {
-  natpmp_queue_t queue = {};
-  auto request = mapping(1);
-  request.state = NATPMP_REQUEST_ACTIVE;
-  natpmp_queue_release(&queue, &request);
-  TEST_ASSERT_EQUAL_PTR(&request, queue.head);
-  TEST_ASSERT_EQUAL(NATPMP_REQUEST_QUEUED, request.state);
-  TEST_ASSERT_TRUE(natpmp_request_released(&request));
-  TEST_ASSERT_EQUAL_UINT16(0, request.map.external_port);
-
-  // and an answer not reported yet goes unreported
-  queue = (natpmp_queue_t){};
-  request = mapping(1);
-  request.state = NATPMP_REQUEST_ANSWERED;
-  natpmp_queue_release(&queue, &request);
-  TEST_ASSERT_EQUAL_PTR(&request, queue.head);
-}
-
-static void test_queue_release_queued() {
+static void test_queue_answer_queued() {
   natpmp_queue_t queue = {};
   auto first = mapping(1);
   auto second = mapping(2);
+  auto third = mapping(3);
   natpmp_queue_push(&queue, &first);
   natpmp_queue_push(&queue, &second);
+  natpmp_queue_push(&queue, &third);
+  natpmp_queue_poll(&queue, 0);
 
-  // keeps its place
-  natpmp_queue_release(&queue, &second);
-  TEST_ASSERT_EQUAL(NATPMP_REQUEST_QUEUED, second.state);
-  TEST_ASSERT_TRUE(natpmp_request_released(&second));
+  // from the middle, keeping the rest in order
+  auto const response = grant(2);
+  natpmp_queue_answer(&queue, &second, 0, &response);
+  TEST_ASSERT_EQUAL(NATPMP_REQUEST_ANSWERED, second.state);
   TEST_ASSERT_EQUAL_PTR(&first, queue.head);
-  TEST_ASSERT_EQUAL_PTR(&second, first.next);
-  TEST_ASSERT_NULL(second.next);
-}
-
-static void test_queue_release_sent() {
-  natpmp_queue_t queue = {};
-  auto request = mapping(1);
-  natpmp_queue_push(&queue, &request);
-  natpmp_queue_poll(&queue, 0);
-
-  // still the head, and goes out again right away as a deletion
-  natpmp_queue_release(&queue, &request);
-  TEST_ASSERT_EQUAL(NATPMP_REQUEST_QUEUED, request.state);
-  TEST_ASSERT_EQUAL_PTR(&request, queue.head);
-  TEST_ASSERT_EQUAL(NATPMP_RETRANSMIT_DUE, natpmp_queue_poll(&queue, 0).status);
-}
-
-static void test_queue_release_failed() {
-  // there's nothing to delete
-  natpmp_queue_t queue = {};
-  auto request = mapping(1);
-  request.state = NATPMP_REQUEST_FAILED;
-  natpmp_queue_release(&queue, &request);
-  TEST_ASSERT_EQUAL(NATPMP_REQUEST_FREE, request.state);
-  TEST_ASSERT_NULL(queue.head);
-}
-
-static void test_queue_release_twice() {
-  natpmp_queue_t queue = {};
-  auto request = mapping(1);
-  natpmp_queue_push(&queue, &request);
-  natpmp_queue_poll(&queue, 0);
-  natpmp_queue_release(&queue, &request);
-  natpmp_queue_poll(&queue, 0);
-
-  natpmp_queue_release(&queue, &request);
-  TEST_ASSERT_EQUAL(NATPMP_REQUEST_SENT, request.state);
+  TEST_ASSERT_EQUAL_PTR(&third, first.next);
 }
 
 void queue_tests() {
@@ -211,9 +157,5 @@ void queue_tests() {
   RUN_TEST(test_queue_ignores_other_responses);
   RUN_TEST(test_queue_pushed_again);
   RUN_TEST(test_queue_fail_all);
-  RUN_TEST(test_queue_release_asks_for_deletion);
-  RUN_TEST(test_queue_release_queued);
-  RUN_TEST(test_queue_release_sent);
-  RUN_TEST(test_queue_release_failed);
-  RUN_TEST(test_queue_release_twice);
+  RUN_TEST(test_queue_answer_queued);
 }

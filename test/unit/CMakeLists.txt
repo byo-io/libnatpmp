@@ -1,6 +1,7 @@
 natpmp_add_test_executable(unit_tests
   main.c
   gateway.c
+  mapping.c
   packet.c
   queue.c
   request.c

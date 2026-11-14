@@ -4,6 +4,7 @@ void setUp() {}
 void tearDown() {}
 
 extern void gateway_tests();
+extern void mapping_tests();
 extern void packet_tests();
 extern void queue_tests();
 extern void request_tests();
@@ -18,6 +19,7 @@ int main(int argc, char *argv[]) {
   UNITY_BEGIN();
 
   gateway_tests();
+  mapping_tests();
   packet_tests();
   queue_tests();
   request_tests();

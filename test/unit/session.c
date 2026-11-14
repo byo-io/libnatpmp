@@ -772,6 +772,7 @@ static void test_session_release_frees_slot() {
           .has_value);
   expect_sent(0, sizeof(map_tcp_deletion), map_tcp_deletion);
   receive(0, sizeof(deletion_response), deletion_response);
+  expect_idle(0);
   map(NATPMP_PROTOCOL_TCP);
   natpmp_session_end(session);
 }
@@ -844,9 +845,11 @@ static void test_session_release_failed() {
   expect_sent(0, sizeof(map_tcp_request), map_tcp_request);
   receive(0, sizeof(map_error), map_error);
 
-  // nothing to delete, and the failure isn't reported
+  // the failure isn't reported, and the deletion makes sure there's nothing
   natpmp_session_release(session, handle);
-  expect_idle(0);
+  expect_sent(0, sizeof(map_tcp_deletion), map_tcp_deletion);
+  receive(10, sizeof(deletion_response), deletion_response);
+  expect_idle(10);
   natpmp_session_end(session);
 }
 
@@ -942,12 +945,15 @@ static void test_session_epoch_answered() {
   expect_sent(0, sizeof(map_tcp_request), map_tcp_request);
   receive(0, sizeof(map_response), map_response);
 
-  // granted, but not reported yet
+  // granted, but not reported yet, and gone with the reboot, so it's asked for
+  // again after the delay
   random_value = 1000;
   receive_epoch(60'000, 1, sizeof(address_response), address_response);
   expect_address(60'000);
-  expect_mapped(60'000, handle);
   expect_timeout(60'000, 61'000);
+  expect_sent(61'000, sizeof(map_tcp_request), map_tcp_request);
+  receive(61'000, sizeof(map_response), map_response);
+  expect_mapped(61'000, handle);
   natpmp_session_end(session);
 }
 
