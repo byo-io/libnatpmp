@@ -214,8 +214,8 @@ natpmp_event_t natpmp_session_poll(natpmp_session_t *session,
  *
  * Both its answers and its announcements to 224.0.0.1:5350, where it tells of a
  * new external address or that it restarted. Only hand over datagrams from the
- * gateway's own address. A new address is reported as NATPMP_EVENT_ADDRESS,
- * the gateway repeating it isn't.
+ * gateway's own address. When the session learns of a new external address,
+ * it reports it as NATPMP_EVENT_ADDRESS.
  *
  * The application should poll the session afterwards, see natpmp_session_poll.
  *

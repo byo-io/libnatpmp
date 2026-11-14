@@ -1,5 +1,6 @@
 #pragma once
 
+#include "packet.h"
 #include <byo/natpmp/natpmp.h>
 
 /**
@@ -19,23 +20,31 @@ typedef struct natpmp_gateway {
   struct {
     bool has_value;
     natpmp_ipv4_address_t value;
+    /// The epoch of the response that gave it, or of the reboot since
+    uint32_t epoch;
   } external_ip;
 } natpmp_gateway_t;
 
-/**
- * @brief Record the epoch of a response that arrived at `now`
- *
- * @returns Whether the gateway lost its mappings since the last response,
- *          going by an epoch more than 2 s behind 7/8 of the time since
- */
-bool natpmp_gateway_update_epoch(natpmp_gateway_t *gateway,
-                                 natpmp_time_ms_t now,
-                                 uint32_t seconds);
+typedef struct natpmp_gateway_update_result {
+  /// The gateway lost its mappings since the last response, going by an epoch
+  /// more than 2 s behind 7/8 of the time since
+  bool rebooted;
+  enum {
+    /// The response has no address, or the one the session has
+    NATPMP_GATEWAY_ADDRESS_UNCHANGED,
+    NATPMP_GATEWAY_ADDRESS_NEW,
+    /// No newer than the one the session has, from a response that was delayed
+    /// or duplicated on the way
+    NATPMP_GATEWAY_ADDRESS_STALE,
+  } address;
+} natpmp_gateway_update_result_t;
 
 /**
- * @brief Record the external address the gateway gave
+ * @brief Record what a response that arrived at `now` says about the gateway
  *
- * @returns Whether it differs from the last one
+ * A stale response changes nothing but the epoch, and the session drops it.
  */
-bool natpmp_gateway_update_external_ip(natpmp_gateway_t *gateway,
-                                       natpmp_ipv4_address_t external_ip);
+natpmp_gateway_update_result_t
+natpmp_gateway_update(natpmp_gateway_t *gateway,
+                      natpmp_time_ms_t now,
+                      natpmp_response_t const *response);

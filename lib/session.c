@@ -274,17 +274,19 @@ void natpmp_session_on_datagram(natpmp_session_t *session,
     return;
   }
 
+  auto const update =
+      natpmp_gateway_update(&session->gateway, now, &response.value);
+  if (update.address == NATPMP_GATEWAY_ADDRESS_STALE) {
+    return;
+  }
+
   // the response still answers the request on the wire, which went to the
   // gateway as it is now, so only the mappings granted before it get renewed
-  if (natpmp_gateway_update_epoch(&session->gateway, now,
-                                  response.value.epoch)) {
+  if (update.rebooted) {
     natpmp_session_recover(session, now);
   }
 
-  // a repeat isn't news
-  if (response.value.type == NATPMP_RESPONSE_ADDRESS &&
-      natpmp_gateway_update_external_ip(&session->gateway,
-                                        response.value.address.external_ip)) {
+  if (update.address == NATPMP_GATEWAY_ADDRESS_NEW) {
     // if the address request is waiting for an answer, let the gateway's
     // response answer it. Otherwise report the new address to the application.
     auto const request = &session->address_request;

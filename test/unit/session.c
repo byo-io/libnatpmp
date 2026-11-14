@@ -1058,9 +1058,9 @@ static void test_session_answered_late() {
   expect_address(0);
 
   // a retransmission's answer, with an address that changed in between
-  receive(250, sizeof(other_address_response), other_address_response);
-  expect_other_address(250);
-  expect_idle(250);
+  receive(1250, sizeof(other_address_response), other_address_response);
+  expect_other_address(1250);
+  expect_idle(1250);
   natpmp_session_end(session);
 }
 
@@ -1071,16 +1071,37 @@ static void test_session_announced_replaces() {
   receive(0, sizeof(address_response), address_response);
 
   // an answer not reported yet
-  receive(10, sizeof(other_address_response), other_address_response);
-  expect_other_address(10);
-  expect_idle(10);
+  receive(1000, sizeof(other_address_response), other_address_response);
+  expect_other_address(1000);
+  expect_idle(1000);
 
   // or a failure
   request();
   natpmp_session_on_host_unreachable(session);
-  receive(20, sizeof(address_response), address_response);
-  expect_address(20);
-  expect_idle(20);
+  receive(2000, sizeof(address_response), address_response);
+  expect_address(2000);
+  expect_idle(2000);
+  natpmp_session_end(session);
+}
+
+static void test_session_stale_address() {
+  begin();
+  receive(1000, sizeof(address_response), address_response);
+  expect_address(1000);
+  receive(2000, sizeof(other_address_response), other_address_response);
+  expect_other_address(2000);
+
+  // a response from before the change, delayed past it
+  receive_epoch(2100, 11, sizeof(address_response), address_response);
+  expect_idle(2100);
+
+  // doesn't answer a request either, which waits for a current answer
+  request();
+  expect_send(2200);
+  receive_epoch(2210, 11, sizeof(address_response), address_response);
+  expect_timeout(2210, 2450);
+  receive(2300, sizeof(other_address_response), other_address_response);
+  expect_other_address(2300);
   natpmp_session_end(session);
 }
 
@@ -1184,6 +1205,7 @@ void session_tests() {
   RUN_TEST(test_session_announced_while_queued);
   RUN_TEST(test_session_answered_late);
   RUN_TEST(test_session_announced_replaces);
+  RUN_TEST(test_session_stale_address);
   RUN_TEST(test_session_announcement_ignored);
   RUN_TEST(test_session_allocator);
   RUN_TEST(test_session_out_of_memory);
