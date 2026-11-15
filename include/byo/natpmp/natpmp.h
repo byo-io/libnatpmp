@@ -7,6 +7,10 @@
 
 #include "compat.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @brief Milliseconds from a monotonic clock like CLOCK_MONOTONIC
  *
@@ -269,3 +273,7 @@ NATPMP_EXPORT void natpmp_session_on_datagram(natpmp_session_t *session,
  */
 NATPMP_EXPORT void
 natpmp_session_on_host_unreachable(natpmp_session_t *session);
+
+#ifdef __cplusplus
+}
+#endif
