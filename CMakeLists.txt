@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.23)
 
-project(natpmp VERSION 0.1.0 LANGUAGES C)
+project(natpmp VERSION 1.0.0 LANGUAGES C)
 
 # The example is only built by default when libnatpmp isn't pulled in by another
 # project (e.g. through FetchContent)

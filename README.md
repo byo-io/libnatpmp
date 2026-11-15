@@ -1,6 +1,6 @@
 # libnatpmp
 
-[![CI](https://github.com/davidlwesten/libnatpmp/actions/workflows/ci.yml/badge.svg)](https://github.com/davidlwesten/libnatpmp/actions/workflows/ci.yml)
+[![CI](https://github.com/byo-io/libnatpmp/actions/workflows/ci.yml/badge.svg)](https://github.com/byo-io/libnatpmp/actions/workflows/ci.yml)
 
 A client library for NAT Port Mapping Protocol ([RFC 6886]), written in C23.
 
