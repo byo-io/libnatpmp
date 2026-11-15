@@ -1,7 +1,11 @@
 #pragma once
 
+#include <assert.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#include "compat.h"
 
 /**
  * @brief Milliseconds from a monotonic clock like CLOCK_MONOTONIC
@@ -143,14 +147,15 @@ void natpmp_session_release(natpmp_session_t *session, natpmp_handle_t handle);
  * Gateways can send codes that aren't listed here, and they're passed on as
  * they are. Treat a code you don't know as any other refusal.
  */
-typedef enum natpmp_result : uint16_t {
+NATPMP_UINT16_ENUM(natpmp_result) {
   NATPMP_RESULT_SUCCESS = 0,
   NATPMP_RESULT_UNSUPPORTED_VERSION = 1,
   NATPMP_RESULT_NOT_AUTHORIZED = 2,
   NATPMP_RESULT_NETWORK_FAILURE = 3,
   NATPMP_RESULT_OUT_OF_RESOURCES = 4,
   NATPMP_RESULT_UNSUPPORTED_OPCODE = 5,
-} natpmp_result_t;
+};
+static_assert(sizeof(natpmp_result_t) == 2, "two bytes, also before C23");
 
 /**
  * @brief Something the application has to handle, see natpmp_session_poll

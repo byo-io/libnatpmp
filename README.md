@@ -84,7 +84,8 @@ Requests go to the gateway one at a time, in the order they were made.
 ## Building
 
 libnatpmp needs a C23 compiler and CMake 3.23 or newer to build, or CMake 3.28
-with the tests. CI builds with GCC 14 and Clang 20.
+with the tests. CI builds with GCC 14 and Clang 20. Its header only needs C11,
+so projects using it can stay on an older standard.
 
 ```sh
 cmake -S . -B build

@@ -3,7 +3,10 @@
 function(natpmp_add_library target)
   add_library(${target} ${ARGN})
 
-  target_compile_features(${target} PUBLIC c_std_23)
+  # The library is C23, its header only needs C11
+  target_compile_features(${target}
+    PUBLIC c_std_11
+    PRIVATE c_std_23)
 
   target_sources(${target}
     PRIVATE
