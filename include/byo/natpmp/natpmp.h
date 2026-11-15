@@ -60,7 +60,7 @@ typedef struct natpmp_session natpmp_session_t;
  *
  * @returns The session, or nullptr if it couldn't be allocated
  */
-natpmp_session_t *natpmp_session_begin(natpmp_config_t config);
+NATPMP_EXPORT natpmp_session_t *natpmp_session_begin(natpmp_config_t config);
 
 /**
  * @brief Free the session
@@ -69,7 +69,7 @@ natpmp_session_t *natpmp_session_begin(natpmp_config_t config);
  * runs out. For a clean shutdown, release all mappings and keep polling until
  * NATPMP_EVENT_TIMEOUT has no deadline.
  */
-void natpmp_session_end(natpmp_session_t *session);
+NATPMP_EXPORT void natpmp_session_end(natpmp_session_t *session);
 
 typedef uint16_t natpmp_handle_t;
 
@@ -93,7 +93,7 @@ typedef struct natpmp_handle_or_error {
  *
  * @param[in] session The session to ask
  */
-void natpmp_session_address_request(natpmp_session_t *session);
+NATPMP_EXPORT void natpmp_session_address_request(natpmp_session_t *session);
 
 typedef enum natpmp_protocol {
   NATPMP_PROTOCOL_TCP = 6,
@@ -122,7 +122,7 @@ typedef enum natpmp_protocol {
  *
  * @returns The handle, or an error (ENOBUFS if the session is at capacity)
  */
-natpmp_handle_or_error_t
+NATPMP_EXPORT natpmp_handle_or_error_t
 natpmp_session_map_request(natpmp_session_t *session,
                            natpmp_time_s_t lifetime,
                            natpmp_protocol_t protocol,
@@ -139,7 +139,8 @@ natpmp_session_map_request(natpmp_session_t *session,
  * @param[in] handle  The mapping to release. Ignored if it's unknown, or was
  *                    already released or failed.
  */
-void natpmp_session_release(natpmp_session_t *session, natpmp_handle_t handle);
+NATPMP_EXPORT void natpmp_session_release(natpmp_session_t *session,
+                                          natpmp_handle_t handle);
 
 /**
  * @brief Why the gateway refused a request
@@ -232,8 +233,8 @@ typedef struct natpmp_event {
  *
  * @returns The next event to handle
  */
-natpmp_event_t natpmp_session_poll(natpmp_session_t *session,
-                                   natpmp_time_ms_t now);
+NATPMP_EXPORT natpmp_event_t natpmp_session_poll(natpmp_session_t *session,
+                                                 natpmp_time_ms_t now);
 
 /**
  * @brief Hand a datagram received from the gateway to the session
@@ -250,10 +251,10 @@ natpmp_event_t natpmp_session_poll(natpmp_session_t *session,
  * @param[in] size    The size of `data`
  * @param[in] data    The datagram's payload
  */
-void natpmp_session_on_datagram(natpmp_session_t *session,
-                                natpmp_time_ms_t now,
-                                size_t size,
-                                uint8_t const data[]);
+NATPMP_EXPORT void natpmp_session_on_datagram(natpmp_session_t *session,
+                                              natpmp_time_ms_t now,
+                                              size_t size,
+                                              uint8_t const data[]);
 
 /**
  * @brief Tell the session its requests can't reach the gateway
@@ -266,4 +267,5 @@ void natpmp_session_on_datagram(natpmp_session_t *session,
  *
  * @param[in] session The session to update
  */
-void natpmp_session_on_host_unreachable(natpmp_session_t *session);
+NATPMP_EXPORT void
+natpmp_session_on_host_unreachable(natpmp_session_t *session);

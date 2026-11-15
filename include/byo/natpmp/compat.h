@@ -2,6 +2,18 @@
 
 #include <stdint.h>
 
+/**
+ * @brief Marks a function as part of the shared library's interface
+ *
+ * The library is built with hidden visibility, so only functions marked with
+ * this are exported.
+ */
+#if defined(__GNUC__) || defined(__clang__)
+#define NATPMP_EXPORT __attribute__((visibility("default")))
+#else
+#define NATPMP_EXPORT
+#endif
+
 // The header works from C11 on, while the library itself is C23. This keeps
 // C23's checks where they're available, with the same layout either way.
 #if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L) ||              \

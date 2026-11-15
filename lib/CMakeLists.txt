@@ -26,6 +26,9 @@ endfunction()
 
 natpmp_add_library(natpmp)
 
+# Only functions marked with NATPMP_EXPORT are exported
+set_target_properties(natpmp PROPERTIES C_VISIBILITY_PRESET hidden)
+
 # The tests check the library's own code with ASan and UBSan too, and the
 # library that gets used is never sanitized
 if(NATPMP_BUILD_TESTS)
