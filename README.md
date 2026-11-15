@@ -118,6 +118,55 @@ port to map:
 ./build/example/natpmpc 192.168.1.1 tcp 8080
 ```
 
+### Installing
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local
+cmake --build build
+cmake --install build
+```
+
+This installs the header under `byo/natpmp/`, the library as `libbyo-natpmp`,
+a CMake package and a pkg-config file, `byo-natpmp.pc`. Set
+`BUILD_SHARED_LIBS=ON` for a shared library.
+
+The pkg-config file has the prefix from configuring, so set it there rather
+than with `cmake --install --prefix`.
+
+### Using it from CMake
+
+An installed libnatpmp is found with `find_package`:
+
+```cmake
+find_package(byo-natpmp 1.0 REQUIRED)
+
+target_link_libraries(your_target PRIVATE byo::natpmp)
+```
+
+Or it can be built along with your project using FetchContent:
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(
+  byo-natpmp
+  GIT_REPOSITORY https://github.com/byo-io/libnatpmp.git
+  GIT_TAG v1.0.0
+)
+FetchContent_MakeAvailable(byo-natpmp)
+
+target_link_libraries(your_target PRIVATE byo::natpmp)
+```
+
+The tests, the example and the install rules are only part of the build when
+libnatpmp is the top-level project. On its own, they can be turned off with
+the usual `BUILD_TESTING`, `NATPMP_BUILD_EXAMPLE` and `NATPMP_INSTALL`.
+
+### Using it with pkg-config
+
+```sh
+cc main.c $(pkg-config --cflags --libs byo-natpmp)
+```
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
