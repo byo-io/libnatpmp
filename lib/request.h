@@ -50,6 +50,11 @@ typedef struct natpmp_request {
 bool natpmp_request_matches(natpmp_request_t const *request,
                             natpmp_response_t const *response);
 
+/**
+ * @brief What the gateway refused it with, SUCCESS if it didn't
+ */
+natpmp_result_t natpmp_request_refusal(natpmp_request_t const *request);
+
 void natpmp_request_answer(natpmp_request_t *request,
                            natpmp_time_ms_t now,
                            natpmp_response_t const *response);

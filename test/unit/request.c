@@ -72,6 +72,18 @@ static void test_request_address_matches() {
   TEST_ASSERT_FALSE(natpmp_request_matches(&request, &refusal));
 }
 
+static void test_request_refusal() {
+  auto request = mapping(3600);
+  TEST_ASSERT_EQUAL_UINT16(NATPMP_RESULT_SUCCESS,
+                           natpmp_request_refusal(&request));
+  natpmp_request_answer(&request, 0, &grant);
+  TEST_ASSERT_EQUAL_UINT16(NATPMP_RESULT_SUCCESS,
+                           natpmp_request_refusal(&request));
+  natpmp_request_answer(&request, 0, &refusal);
+  TEST_ASSERT_EQUAL_UINT16(NATPMP_RESULT_NOT_AUTHORIZED,
+                           natpmp_request_refusal(&request));
+}
+
 static void test_request_answer() {
   // keeps the response for its owner, a refusal too
   auto request = mapping(3600);
@@ -85,5 +97,6 @@ void request_tests() {
   RUN_TEST(test_request_matches);
   RUN_TEST(test_request_deletion_matches);
   RUN_TEST(test_request_address_matches);
+  RUN_TEST(test_request_refusal);
   RUN_TEST(test_request_answer);
 }

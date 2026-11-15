@@ -85,7 +85,7 @@ static void build_map_request(struct src *in, struct natpmp_map_request *v) {
 static void build_response_header(struct src *in, struct natpmp_response_header *v) {
     v->r = (uint8_t)(take_u32(in) & 0x1);
     v->opcode = (enum natpmp_opcode)(take_u32(in) & 0x7f);
-    v->result = (enum natpmp_result)(take_u32(in) & 0xffff);
+    v->result = (uint16_t)(take_u32(in) & 0xffff);
     v->epoch = (uint32_t)(take_u32(in) & 0xffffffff);
     take_bytes(in, &v->body, SIZE_MAX);
 }

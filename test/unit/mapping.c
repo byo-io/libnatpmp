@@ -51,10 +51,12 @@ static natpmp_mapping_t mapped() {
 }
 
 static void assert_map_failed(natpmp_optional_event_t event,
-                              natpmp_mapping_t const *mapping) {
+                              natpmp_mapping_t const *mapping,
+                              natpmp_result_t result) {
   TEST_ASSERT_TRUE(event.has_value);
   TEST_ASSERT_EQUAL(NATPMP_EVENT_MAP_FAILED, event.value.type);
   TEST_ASSERT_EQUAL_UINT16(1, event.value.map_failed.handle);
+  TEST_ASSERT_EQUAL_UINT16(result, event.value.map_failed.result);
   TEST_ASSERT_EQUAL_UINT16(0, mapping->handle);
 }
 
@@ -83,19 +85,21 @@ static void test_mapping_granted() {
 
 static void test_mapping_refused() {
   auto mapping = requested();
-  assert_map_failed(answer(&mapping, 0, &refusal), &mapping);
+  assert_map_failed(answer(&mapping, 0, &refusal), &mapping,
+                    NATPMP_RESULT_NOT_AUTHORIZED);
 
   // and a mapping for no time is no mapping
   mapping = requested();
   auto none = grant;
   none.map.lifetime = 0;
-  assert_map_failed(answer(&mapping, 0, &none), &mapping);
+  assert_map_failed(answer(&mapping, 0, &none), &mapping,
+                    NATPMP_RESULT_SUCCESS);
 }
 
 static void test_mapping_unanswered() {
   auto mapping = requested();
   mapping.request.state = NATPMP_REQUEST_FAILED;
-  assert_map_failed(poll(&mapping, 0), &mapping);
+  assert_map_failed(poll(&mapping, 0), &mapping, NATPMP_RESULT_SUCCESS);
 }
 
 static void test_mapping_renews() {
@@ -119,7 +123,7 @@ static void test_mapping_renewal_unanswered() {
 
   // until it expires
   mapping.request.state = NATPMP_REQUEST_FAILED;
-  assert_map_failed(poll(&mapping, 7'200'000), &mapping);
+  assert_map_failed(poll(&mapping, 7'200'000), &mapping, NATPMP_RESULT_SUCCESS);
 }
 
 static void test_mapping_renewal_retried_late() {
@@ -132,8 +136,8 @@ static void test_mapping_renewal_retried_late() {
 
 static void test_mapping_renewal_failed_for_now() {
   // tries again like an unanswered one
-  auto const failures = (uint16_t[]){NATPMP_RESULT_NETWORK_FAILURE,
-                                     NATPMP_RESULT_OUT_OF_RESOURCES};
+  auto const failures = (natpmp_result_t[]){NATPMP_RESULT_NETWORK_FAILURE,
+                                            NATPMP_RESULT_OUT_OF_RESOURCES};
   for (size_t i = 0; i < 2; ++i) {
     auto mapping = mapped();
     auto failure = refusal;
@@ -143,18 +147,19 @@ static void test_mapping_renewal_failed_for_now() {
 
     // but a new mapping fails right away
     mapping = requested();
-    assert_map_failed(answer(&mapping, 0, &failure), &mapping);
+    assert_map_failed(answer(&mapping, 0, &failure), &mapping, failures[i]);
   }
 
   // and so does a renewal that's refused
   auto mapping = mapped();
-  assert_map_failed(answer(&mapping, 3'700'000, &refusal), &mapping);
+  assert_map_failed(answer(&mapping, 3'700'000, &refusal), &mapping,
+                    NATPMP_RESULT_NOT_AUTHORIZED);
 }
 
 static void test_mapping_expires() {
   auto mapping = mapped();
   mapping.renew_at = 7'200'000;
-  assert_map_failed(poll(&mapping, 7'200'000), &mapping);
+  assert_map_failed(poll(&mapping, 7'200'000), &mapping, NATPMP_RESULT_SUCCESS);
 }
 
 static void test_mapping_release_asks_for_deletion() {
@@ -257,7 +262,7 @@ static void test_mapping_recover_drops_grant() {
   mapping = requested();
   natpmp_request_answer(&mapping.request, 0, &refusal);
   natpmp_mapping_recover(&mapping, 1000);
-  assert_map_failed(poll(&mapping, 0), &mapping);
+  assert_map_failed(poll(&mapping, 0), &mapping, NATPMP_RESULT_NOT_AUTHORIZED);
 }
 
 void mapping_tests() {

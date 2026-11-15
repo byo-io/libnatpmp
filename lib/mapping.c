@@ -57,7 +57,8 @@ static bool natpmp_response_transient_error(natpmp_response_t const *response) {
           response->error.result == NATPMP_RESULT_OUT_OF_RESOURCES);
 }
 
-static natpmp_optional_event_t natpmp_mapping_fail(natpmp_mapping_t *mapping) {
+static natpmp_optional_event_t natpmp_mapping_fail(natpmp_mapping_t *mapping,
+                                                   natpmp_result_t result) {
   assert(mapping);
 
   auto const handle = mapping->handle;
@@ -65,7 +66,7 @@ static natpmp_optional_event_t natpmp_mapping_fail(natpmp_mapping_t *mapping) {
   return (natpmp_optional_event_t){
       .has_value = true,
       .value = {.type = NATPMP_EVENT_MAP_FAILED,
-                .map_failed = {.handle = handle}},
+                .map_failed = {.handle = handle, .result = result}},
   };
 }
 
@@ -75,9 +76,12 @@ natpmp_mapping_take_answer(natpmp_mapping_t *mapping) {
 
   auto const request = &mapping->request;
   auto const response = &request->response;
-  if (response->type == NATPMP_RESPONSE_ERROR || response->map.lifetime == 0) {
-    // refused, or mapped for no time, which is no mapping
-    return natpmp_mapping_fail(mapping);
+  if (response->type == NATPMP_RESPONSE_ERROR) {
+    return natpmp_mapping_fail(mapping, response->error.result);
+  }
+  if (response->map.lifetime == 0) {
+    // mapped for no time, which is no mapping
+    return natpmp_mapping_fail(mapping, NATPMP_RESULT_SUCCESS);
   }
 
   request->external_port = response->map.external_port;
@@ -111,6 +115,7 @@ natpmp_optional_event_t natpmp_mapping_poll(natpmp_mapping_t *mapping,
   if (request->state != NATPMP_REQUEST_IDLE) {
     auto const retry = request->state == NATPMP_REQUEST_FAILED ||
                        natpmp_response_transient_error(&request->response);
+    auto const refusal = natpmp_request_refusal(request);
     request->state = NATPMP_REQUEST_IDLE;
 
     if (natpmp_mapping_released(mapping)) {
@@ -124,7 +129,7 @@ natpmp_optional_event_t natpmp_mapping_poll(natpmp_mapping_t *mapping,
     }
 
     if (!natpmp_mapping_has_expiration(mapping)) {
-      return natpmp_mapping_fail(mapping);
+      return natpmp_mapping_fail(mapping, refusal);
     }
 
     // when a renewal goes unanswered or fails for now, try again halfway
@@ -134,7 +139,7 @@ natpmp_optional_event_t natpmp_mapping_poll(natpmp_mapping_t *mapping,
   }
 
   if (natpmp_mapping_expired(mapping, now)) {
-    return natpmp_mapping_fail(mapping);
+    return natpmp_mapping_fail(mapping, NATPMP_RESULT_SUCCESS);
   }
 
   if (mapping->renew_at <= now) {

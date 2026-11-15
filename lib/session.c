@@ -159,15 +159,21 @@ natpmp_session_take_address(natpmp_session_t *session) {
   // a refusal answers it too, as a failure
   auto const answered = request->state == NATPMP_REQUEST_ANSWERED &&
                         request->response.type == NATPMP_RESPONSE_ADDRESS;
+  auto const refusal = natpmp_request_refusal(request);
   request->state = NATPMP_REQUEST_IDLE;
+  if (answered) {
+    return (natpmp_optional_event_t){
+        .has_value = true,
+        .value = {.type = NATPMP_EVENT_ADDRESS,
+                  .address = {.external_ip =
+                                  request->response.address.external_ip}},
+    };
+  }
+
   return (natpmp_optional_event_t){
       .has_value = true,
-      .value = answered
-                   ? (natpmp_event_t){.type = NATPMP_EVENT_ADDRESS,
-                                      .address = {.external_ip =
-                                                      request->response.address
-                                                          .external_ip}}
-                   : (natpmp_event_t){.type = NATPMP_EVENT_ADDRESS_FAILED},
+      .value = {.type = NATPMP_EVENT_ADDRESS_FAILED,
+                .address_failed = {.result = refusal}},
   };
 }
 

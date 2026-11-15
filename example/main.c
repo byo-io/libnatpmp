@@ -197,12 +197,14 @@ int main(int argc, char *argv[]) {
       waiting -= 1;
       break;
     case NATPMP_EVENT_ADDRESS_FAILED:
-      fprintf(stderr, "the gateway didn't give its external address\n");
+      fprintf(stderr, "the gateway didn't give its external address (%u)\n",
+              event.address_failed.result);
       status = EXIT_FAILURE;
       waiting -= 1;
       break;
     case NATPMP_EVENT_MAP_FAILED:
-      fprintf(stderr, "the gateway didn't map %s %u\n", argv[2], port);
+      fprintf(stderr, "the gateway didn't map %s %u (%u)\n", argv[2], port,
+              event.map_failed.result);
       status = EXIT_FAILURE;
       waiting -= 1;
       break;

@@ -47,7 +47,7 @@ typedef struct natpmp_response {
   union {
     struct {
       /// Not SUCCESS, and can be a code RFC 6886 doesn't define
-      uint16_t result;
+      natpmp_result_t result;
       /// The request that failed
       enum natpmp_opcode opcode;
     } error;

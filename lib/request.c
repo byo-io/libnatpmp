@@ -21,6 +21,15 @@ bool natpmp_request_matches(natpmp_request_t const *request,
   unreachable();
 }
 
+natpmp_result_t natpmp_request_refusal(natpmp_request_t const *request) {
+  assert(request);
+
+  return request->state == NATPMP_REQUEST_ANSWERED &&
+                 request->response.type == NATPMP_RESPONSE_ERROR
+             ? request->response.error.result
+             : NATPMP_RESULT_SUCCESS;
+}
+
 void natpmp_request_answer(natpmp_request_t *request,
                            natpmp_time_ms_t now,
                            natpmp_response_t const *response) {

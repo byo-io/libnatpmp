@@ -138,6 +138,21 @@ natpmp_session_map_request(natpmp_session_t *session,
 void natpmp_session_release(natpmp_session_t *session, natpmp_handle_t handle);
 
 /**
+ * @brief Why the gateway refused a request
+ *
+ * Gateways can send codes that aren't listed here, and they're passed on as
+ * they are. Treat a code you don't know as any other refusal.
+ */
+typedef enum natpmp_result : uint16_t {
+  NATPMP_RESULT_SUCCESS = 0,
+  NATPMP_RESULT_UNSUPPORTED_VERSION = 1,
+  NATPMP_RESULT_NOT_AUTHORIZED = 2,
+  NATPMP_RESULT_NETWORK_FAILURE = 3,
+  NATPMP_RESULT_OUT_OF_RESOURCES = 4,
+  NATPMP_RESULT_UNSUPPORTED_OPCODE = 5,
+} natpmp_result_t;
+
+/**
  * @brief Something the application has to handle, see natpmp_session_poll
  *
  * Later versions may add event types, so ignore any you don't know, e.g. with
@@ -152,15 +167,17 @@ typedef struct natpmp_event {
     /// natpmp_session_on_datagram)
     NATPMP_EVENT_ADDRESS,
     /// The gateway refused the external address request, didn't answer, or
-    /// couldn't be reached
+    /// couldn't be reached. `address_failed.result` is what it refused it
+    /// with, SUCCESS otherwise.
     NATPMP_EVENT_ADDRESS_FAILED,
     /// Each time the gateway grants the mapping: `mapped.external_port` to the
     /// internal port for `mapped.lifetime` seconds. Both can differ from what
     /// was asked for.
     NATPMP_EVENT_MAPPED,
-    /// The gateway refused the mapping, didn't answer, couldn't be reached, or
-    /// the mapping expired without being renewed. This is the last event for
-    /// the handle.
+    /// The gateway refused the mapping, granted it for no time, didn't answer,
+    /// couldn't be reached, or the mapping expired without being renewed.
+    /// `map_failed.result` is what it refused it with, SUCCESS otherwise. This
+    /// is the last event for the handle.
     NATPMP_EVENT_MAP_FAILED,
     /// Nothing more to do before `timeout.deadline`, see natpmp_session_poll
     NATPMP_EVENT_TIMEOUT,
@@ -177,12 +194,16 @@ typedef struct natpmp_event {
       natpmp_ipv4_address_t external_ip;
     } address;
     struct {
+      natpmp_result_t result;
+    } address_failed;
+    struct {
       natpmp_handle_t handle;
       natpmp_port_t external_port;
       natpmp_time_s_t lifetime;
     } mapped;
     struct {
       natpmp_handle_t handle;
+      natpmp_result_t result;
     } map_failed;
     struct {
       /// Always later than `now`. Empty if nothing is scheduled, in which case

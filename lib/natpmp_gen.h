@@ -23,16 +23,6 @@ enum natpmp_opcode : uint8_t {
     NATPMP_OPCODE_MAP_TCP          = 2,
 };
 
-/* enum Result : u16 */
-enum natpmp_result : uint16_t {
-    NATPMP_RESULT_SUCCESS             = 0,
-    NATPMP_RESULT_UNSUPPORTED_VERSION = 1,
-    NATPMP_RESULT_NOT_AUTHORIZED      = 2,
-    NATPMP_RESULT_NETWORK_FAILURE     = 3,
-    NATPMP_RESULT_OUT_OF_RESOURCES    = 4,
-    NATPMP_RESULT_UNSUPPORTED_OPCODE  = 5,
-};
-
 /* u8[..] and u8[len]: points into the buffer. */
 struct natpmp_bytes {
     const uint8_t *ptr;
@@ -72,14 +62,14 @@ constexpr size_t NATPMP_MAP_REQUEST_MAX_SIZE = 12;
  *     version: u8 = 0;
  *     r: u1;
  *     opcode: Opcode;
- *     result: Result;
+ *     result: u16;
  *     epoch: u32;
  *     body: u8[..];
  * } */
 struct natpmp_response_header {
     uint8_t r;
     enum natpmp_opcode opcode;
-    enum natpmp_result result;
+    uint16_t result;
     uint32_t epoch;
     struct natpmp_bytes body;
 };
