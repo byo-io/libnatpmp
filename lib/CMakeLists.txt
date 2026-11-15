@@ -78,8 +78,8 @@ if(PKTC_EXECUTABLE)
     VERBATIM)
 endif()
 
-# Installs the library and its header, and a package so other projects can
-# find_package(byo-natpmp) and link to byo::natpmp
+# Installs the library and its header, a package so other projects can
+# find_package(byo-natpmp) and link to byo::natpmp, and a pkg-config file
 if(NATPMP_INSTALL)
   include(GNUInstallDirs)
   include(CMakePackageConfigHelpers)
@@ -104,4 +104,11 @@ if(NATPMP_INSTALL)
       ${CMAKE_CURRENT_BINARY_DIR}/byo-natpmpConfig.cmake
       ${CMAKE_CURRENT_BINARY_DIR}/byo-natpmpConfigVersion.cmake
     DESTINATION ${NATPMP_CMAKE_DIR})
+
+  # The paths are absolute, from CMAKE_INSTALL_PREFIX, so pkg-config can tell
+  # when they're system directories and leave them out
+  configure_file(${PROJECT_SOURCE_DIR}/cmake/byo-natpmp.pc.in
+                 ${CMAKE_CURRENT_BINARY_DIR}/byo-natpmp.pc @ONLY)
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/byo-natpmp.pc
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 endif()
