@@ -130,6 +130,27 @@ static void test_mapping_renewal_retried_late() {
   TEST_ASSERT_EQUAL_PTR(&mapping.request, queue.head);
 }
 
+static void test_mapping_renewal_failed_for_now() {
+  // tries again like an unanswered one
+  auto const failures = (uint16_t[]){NATPMP_RESULT_NETWORK_FAILURE,
+                                     NATPMP_RESULT_OUT_OF_RESOURCES};
+  for (size_t i = 0; i < 2; ++i) {
+    auto mapping = mapped();
+    auto failure = refusal;
+    failure.error.result = failures[i];
+    TEST_ASSERT_FALSE(answer(&mapping, 3'700'000, &failure).has_value);
+    TEST_ASSERT_EQUAL_UINT64(5'400'000, mapping.renew_at);
+
+    // but a new mapping fails right away
+    mapping = requested();
+    assert_map_failed(answer(&mapping, 0, &failure), &mapping);
+  }
+
+  // and so does a renewal that's refused
+  auto mapping = mapped();
+  assert_map_failed(answer(&mapping, 3'700'000, &refusal), &mapping);
+}
+
 static void test_mapping_expires() {
   auto mapping = mapped();
   mapping.renew_at = 7'200'000;
@@ -247,6 +268,7 @@ void mapping_tests() {
   RUN_TEST(test_mapping_renews);
   RUN_TEST(test_mapping_renewal_unanswered);
   RUN_TEST(test_mapping_renewal_retried_late);
+  RUN_TEST(test_mapping_renewal_failed_for_now);
   RUN_TEST(test_mapping_expires);
   RUN_TEST(test_mapping_release_asks_for_deletion);
   RUN_TEST(test_mapping_release_queued);

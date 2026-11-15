@@ -3,11 +3,19 @@
 #include <assert.h>
 
 static bool natpmp_mapping_released(natpmp_mapping_t const *mapping) {
+  assert(mapping);
   return mapping->request.lifetime == 0;
 }
 
-static bool natpmp_mapping_mapped(natpmp_mapping_t const *mapping) {
+static bool natpmp_mapping_has_expiration(natpmp_mapping_t const *mapping) {
+  assert(mapping);
   return mapping->expires_at > 0;
+}
+
+static bool natpmp_mapping_expired(natpmp_mapping_t const *mapping,
+                                   natpmp_time_ms_t now) {
+  assert(mapping);
+  return natpmp_mapping_has_expiration(mapping) && mapping->expires_at <= now;
 }
 
 void natpmp_mapping_release(natpmp_mapping_t *mapping, natpmp_queue_t *queue) {
@@ -41,7 +49,17 @@ void natpmp_mapping_release(natpmp_mapping_t *mapping, natpmp_queue_t *queue) {
   unreachable();
 }
 
+static bool natpmp_response_transient_error(natpmp_response_t const *response) {
+  assert(response);
+
+  return response->type == NATPMP_RESPONSE_ERROR &&
+         (response->error.result == NATPMP_RESULT_NETWORK_FAILURE ||
+          response->error.result == NATPMP_RESULT_OUT_OF_RESOURCES);
+}
+
 static natpmp_optional_event_t natpmp_mapping_fail(natpmp_mapping_t *mapping) {
+  assert(mapping);
+
   auto const handle = mapping->handle;
   *mapping = (natpmp_mapping_t){};
   return (natpmp_optional_event_t){
@@ -53,6 +71,8 @@ static natpmp_optional_event_t natpmp_mapping_fail(natpmp_mapping_t *mapping) {
 
 static natpmp_optional_event_t
 natpmp_mapping_take_answer(natpmp_mapping_t *mapping) {
+  assert(mapping);
+
   auto const request = &mapping->request;
   auto const response = &request->response;
   if (response->type == NATPMP_RESPONSE_ERROR || response->map.lifetime == 0) {
@@ -83,42 +103,44 @@ natpmp_optional_event_t natpmp_mapping_poll(natpmp_mapping_t *mapping,
   assert(queue);
 
   auto const request = &mapping->request;
-  switch (request->state) {
-  case NATPMP_REQUEST_QUEUED:
-  case NATPMP_REQUEST_SENT:
+  if (request->state == NATPMP_REQUEST_QUEUED ||
+      request->state == NATPMP_REQUEST_SENT) {
     return (natpmp_optional_event_t){};
-  case NATPMP_REQUEST_ANSWERED:
-  case NATPMP_REQUEST_FAILED: {
-    auto const answered = request->state == NATPMP_REQUEST_ANSWERED;
+  }
+
+  if (request->state != NATPMP_REQUEST_IDLE) {
+    auto const retry = request->state == NATPMP_REQUEST_FAILED ||
+                       natpmp_response_transient_error(&request->response);
     request->state = NATPMP_REQUEST_IDLE;
+
     if (natpmp_mapping_released(mapping)) {
-      // deleted, or refused or given up on and left to expire
+      // deleted, refused, or given up on and can be left to expire
       *mapping = (natpmp_mapping_t){};
       return (natpmp_optional_event_t){};
     }
-    if (answered) {
+
+    if (!retry) {
       return natpmp_mapping_take_answer(mapping);
     }
-    if (!natpmp_mapping_mapped(mapping)) {
+
+    if (!natpmp_mapping_has_expiration(mapping)) {
       return natpmp_mapping_fail(mapping);
     }
 
-    // when a renewal goes unanswered, try again halfway through the remaining
-    // lifetime to avoid a dangling mapping on the gateway that's not tracked
+    // when a renewal goes unanswered or fails for now, try again halfway
+    // through the remaining lifetime to avoid a dangling mapping on the gateway
+    // that's not tracked
     mapping->renew_at += (mapping->expires_at - mapping->renew_at) / 2;
-    break;
-  }
-  case NATPMP_REQUEST_IDLE:
-    break;
   }
 
-  if (natpmp_mapping_mapped(mapping) && mapping->expires_at <= now) {
+  if (natpmp_mapping_expired(mapping, now)) {
     return natpmp_mapping_fail(mapping);
   }
 
   if (mapping->renew_at <= now) {
     natpmp_queue_push(queue, request);
   }
+
   return (natpmp_optional_event_t){};
 }
 
@@ -133,8 +155,9 @@ void natpmp_mapping_recover(natpmp_mapping_t *mapping,
                        request->response.type == NATPMP_RESPONSE_MAP &&
                        request->response.map.lifetime > 0;
   auto const renewal_unanswered = request->state == NATPMP_REQUEST_FAILED &&
-                                  natpmp_mapping_mapped(mapping) &&
+                                  natpmp_mapping_has_expiration(mapping) &&
                                   !natpmp_mapping_released(mapping);
+
   if (granted || renewal_unanswered) {
     request->state = NATPMP_REQUEST_IDLE;
   }
@@ -147,7 +170,7 @@ void natpmp_mapping_recover(natpmp_mapping_t *mapping,
   // a mapping close to its expiry can get a delay that runs past it, so cap the
   // delay at the expiry, where the mapping fails on time instead
   mapping->renew_at =
-      natpmp_mapping_mapped(mapping) && mapping->expires_at < renew_at
+      natpmp_mapping_has_expiration(mapping) && mapping->expires_at < renew_at
           ? mapping->expires_at
           : renew_at;
 }
