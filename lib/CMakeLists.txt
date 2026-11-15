@@ -19,15 +19,30 @@ function(natpmp_add_library target)
       session.c
       natpmp_gen.c)
 
-  target_include_directories(${target} PUBLIC ${PROJECT_SOURCE_DIR}/include)
+  target_sources(${target}
+    PUBLIC
+      FILE_SET HEADERS
+        BASE_DIRS ${PROJECT_SOURCE_DIR}/include
+        FILES
+          ${PROJECT_SOURCE_DIR}/include/byo/natpmp/compat.h
+          ${PROJECT_SOURCE_DIR}/include/byo/natpmp/natpmp.h)
 
-  target_link_libraries(${target} PRIVATE natpmp_warnings)
+  # Only while building, so the installed library doesn't need the warnings
+  # target
+  target_link_libraries(${target} PRIVATE $<BUILD_INTERFACE:natpmp_warnings>)
 endfunction()
 
 natpmp_add_library(natpmp)
+add_library(byo::natpmp ALIAS natpmp)
 
-# Only functions marked with NATPMP_EXPORT are exported
-set_target_properties(natpmp PROPERTIES C_VISIBILITY_PRESET hidden)
+# Installed as libbyo-natpmp, since other projects already use libnatpmp. A
+# shared library's soname only changes with the major version. Only functions
+# marked with NATPMP_EXPORT are exported.
+set_target_properties(natpmp PROPERTIES
+  OUTPUT_NAME byo-natpmp
+  C_VISIBILITY_PRESET hidden
+  VERSION ${PROJECT_VERSION}
+  SOVERSION ${PROJECT_VERSION_MAJOR})
 
 # The tests check the library's own code with ASan and UBSan too, and the
 # library that gets used is never sanitized
@@ -61,4 +76,32 @@ if(PKTC_EXECUTABLE)
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/natpmp.pkt
     COMMENT "Generating the wire format from natpmp.pkt"
     VERBATIM)
+endif()
+
+# Installs the library and its header, and a package so other projects can
+# find_package(byo-natpmp) and link to byo::natpmp
+if(NATPMP_INSTALL)
+  include(GNUInstallDirs)
+  include(CMakePackageConfigHelpers)
+
+  set(NATPMP_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/byo-natpmp)
+
+  install(TARGETS natpmp
+    EXPORT byo-natpmpTargets
+    FILE_SET HEADERS)
+  install(EXPORT byo-natpmpTargets
+    NAMESPACE byo::
+    DESTINATION ${NATPMP_CMAKE_DIR})
+
+  configure_package_config_file(
+    ${PROJECT_SOURCE_DIR}/cmake/byo-natpmpConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/byo-natpmpConfig.cmake
+    INSTALL_DESTINATION ${NATPMP_CMAKE_DIR})
+  write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/byo-natpmpConfigVersion.cmake
+    COMPATIBILITY SameMajorVersion)
+  install(FILES
+      ${CMAKE_CURRENT_BINARY_DIR}/byo-natpmpConfig.cmake
+      ${CMAKE_CURRENT_BINARY_DIR}/byo-natpmpConfigVersion.cmake
+    DESTINATION ${NATPMP_CMAKE_DIR})
 endif()

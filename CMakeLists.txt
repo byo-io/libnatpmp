@@ -10,6 +10,7 @@ option(NATPMP_BUILD_FUZZER
 # Off by default, so a newer compiler's warnings don't break the build. CI turns
 # it on.
 option(NATPMP_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
+option(NATPMP_INSTALL "Generate the install rules" ${PROJECT_IS_TOP_LEVEL})
 
 include(cmake/warnings.cmake)
 
